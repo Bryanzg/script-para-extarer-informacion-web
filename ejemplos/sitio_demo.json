@@ -1,6 +1,7 @@
 {
   "url_solicitada": "http://localhost:8931",
-  "fecha_auditoria": "2026-09-24T15:56:23",
+  "empresa": "Acme Demo (sitio ficticio de prueba)",
+  "fecha_auditoria": "2026-09-24T16:12:00",
   "paginas_analizadas": [
     "http://localhost:8931/",
     "http://localhost:8931/aviso-legal/",
@@ -66,11 +67,6 @@
         "numero": "+52 55 8000 1234",
         "tipo": "formato internacional",
         "confianza": "alta"
-      },
-      {
-        "numero": "4242 4242 4242",
-        "tipo": "formato local",
-        "confianza": "media"
       }
     ],
     "redes_sociales": {

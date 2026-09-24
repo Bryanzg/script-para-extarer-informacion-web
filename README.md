@@ -68,7 +68,9 @@ Dependencias: `requests` y `beautifulsoup4` (Python ≥ 3.9).
 
 ## ▶️ Uso
 
-1. Edita **`empresas.txt`** y escribe una URL por línea:
+1. Prepara la lista de empresas en **cualquiera de estos formatos**:
+
+   **a) Texto plano** (`empresas.txt`), una URL por línea:
 
    ```
    https://www.empresa1.com
@@ -76,10 +78,27 @@ Dependencias: `requests` y `beautifulsoup4` (Python ≥ 3.9).
    # líneas con # son comentarios
    ```
 
+   **b) CSV / TSV** (ej. `empresas_y_sitios_web.csv`). El script detecta
+   automáticamente el delimitador (`,` `;` tab `|`), la **columna de URLs**
+   (por nombre: `url`, `sitio web`, `website`, `dominio`, … o por contenido)
+   y, si existe, la **columna con el nombre de la empresa** (`empresa`,
+   `nombre`, `razón social`, `compañía`, …) para etiquetar el reporte:
+
+   ```csv
+   Empresa,Sitio web,Sector
+   Acme Demo,https://www.empresa1.com,Software
+   Distribuidora XYZ,empresa2.mx,Retail
+   ```
+
+   No importa si el CSV trae más columnas (sector, dirección, etc.): se
+   usan solo la empresa y el sitio web.
+
 2. Ejecuta:
 
    ```bash
    python extractor.py empresas.txt --salida salida/
+   # o directamente el CSV:
+   python extractor.py empresas_y_sitios_web.csv --salida salida/
    ```
 
 3. Abre los resultados (ver siguiente sección).

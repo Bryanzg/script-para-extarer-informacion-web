@@ -21,6 +21,7 @@ applicable (GDPR, LFPDPPP, etc.).
 
 Uso:
     python extractor.py empresas.txt --salida salida/ --max-paginas 12
+    python extractor.py empresas_y_sitios_web.csv   # CSV: detecta la columna de URLs
     python extractor.py --auto-test          # prueba los detectores sin red
 
 Requisitos: pip install -r requirements.txt
@@ -68,6 +69,99 @@ def normalizar_url(url):
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
         url = "https://" + url
     return url
+
+
+_RE_CELDA_URL = re.compile(
+    r"^(?:https?://|www\.)?"
+    r"(?:[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}|localhost|\d{1,3}(?:\.\d{1,3}){3})"
+    r"(?::\d{1,5})?(?:/[^\s]*)?$", re.I)
+
+# Nombres típicos de la columna con el sitio web en un CSV de empresas
+_COLUMNAS_URL = ("url", "urls", "sitio", "sitio web", "sitio_web", "sitio-web",
+                 "website", "web", "web site", "pagina", "página", "pagina web",
+                 "página web", "dominio", "domain", "site", "homepage", "enlace",
+                 "link", "url sitio", "sitio url")
+_COLUMNAS_EMPRESA = ("empresa", "nombre", "compañia", "compania", "company",
+                     "razon social", "razón social", "organizacion", "organización",
+                     "negocio", "business", "cliente")
+
+
+def _parece_url(celda):
+    return bool(_RE_CELDA_URL.match(celda.strip()))
+
+
+def cargar_lugares(archivo):
+    """
+    Carga la lista de sitios a auditar. Admite:
+      • .txt  -> una URL por línea (comentarios con #)
+      • .csv/.tsv -> detecta automáticamente el delimitador, la columna de URLs
+        y (si existe) la columna con el nombre de la empresa.
+
+    Devuelve lista de dicts {"url": ..., "empresa": ... o None}, sin duplicados.
+    """
+    if not archivo.lower().endswith((".csv", ".tsv")):
+        with open(archivo, encoding="utf-8-sig") as f:
+            crudas = [l.strip() for l in f if l.strip() and not l.strip().startswith("#")]
+        return _deduplicar([{"url": u, "empresa": None}
+                            for u in (normalizar_url(x) for x in crudas) if u])
+
+    with open(archivo, encoding="utf-8-sig", newline="") as f:
+        muestra = f.read(8192)
+        f.seek(0)
+        primera = muestra.splitlines()[0] if muestra else ""
+        delimitador = max((",", ";", "\t", "|"), key=primera.count)
+        filas = [fila for fila in csv.reader(f, delimiter=delimitador) if any(fila)]
+
+    if not filas:
+        return []
+
+    # ¿la primera fila es cabecera? (ninguna celda parece URL)
+    tiene_cabecera = not any(_parece_url(c) for c in filas[0])
+    datos = filas[1:] if tiene_cabecera else filas
+    cabecera = [c.strip().lower() for c in filas[0]] if tiene_cabecera else []
+
+    def _idx(nombres, prediccion_default=None):
+        for i, nombre in enumerate(cabecera):
+            if nombre in nombres:
+                return i
+        return prediccion_default
+
+    idx_url = _idx(_COLUMNAS_URL)
+    idx_emp = _idx(_COLUMNAS_EMPRESA)
+
+    if idx_url is None and datos:  # sin pista por cabecera: columna más "URL-osa"
+        n_col = max(len(f) for f in datos)
+        mejor, mejor_punt = None, 0.0
+        for i in range(n_col):
+            vals = [f[i] for f in datos if i < len(f) and f[i].strip()]
+            punt = sum(_parece_url(v) for v in vals) / len(vals) if vals else 0
+            if punt > mejor_punt:
+                mejor, mejor_punt = i, punt
+        idx_url = mejor if mejor_punt >= 0.4 else None
+
+    lugares = []
+    for fila in datos:
+        if idx_url is not None and idx_url < len(fila) and _parece_url(fila[idx_url]):
+            celda = fila[idx_url]
+        else:  # último recurso: primera celda de la fila que parezca URL
+            celda = next((c for c in fila if _parece_url(c)), None)
+        if not celda:
+            continue
+        empresa = None
+        if idx_emp is not None and idx_emp < len(fila) and fila[idx_emp].strip():
+            empresa = fila[idx_emp].strip()
+        lugares.append({"url": normalizar_url(celda), "empresa": empresa})
+    return _deduplicar(lugares)
+
+
+def _deduplicar(lugares):
+    vistos, unicos = set(), []
+    for l in lugares:
+        clave = host_base(l["url"]) + (l.get("empresa") or "")
+        if clave not in vistos:
+            vistos.add(clave)
+            unicos.append(l)
+    return unicos
 
 
 def host_base(url):
@@ -221,7 +315,7 @@ class Rastreador:
 # Auditoría por sitio
 # ----------------------------------------------------------------------
 
-def auditar_sitio(url, cfg):
+def auditar_sitio(url, cfg, empresa=None):
     rastreador = Rastreador(cfg)
     inicio = time.time()
 
@@ -231,6 +325,7 @@ def auditar_sitio(url, cfg):
 
     resultado = {
         "url_solicitada": url,
+        "empresa": empresa,
         "fecha_auditoria": _dt.datetime.now().isoformat(timespec="seconds"),
         "paginas_analizadas": [p.get("url_final", p["url"]) for p in paginas_ok],
         "paginas_con_error": [{"url": p["url"], "error": p["error"]} for p in errores],
@@ -331,7 +426,7 @@ def guardar_json(datos, ruta):
 
 def guardar_csv(resultados, ruta):
     from firmas_tecnologia import CATEGORIAS
-    columnas = (["sitio", "estado", "emails", "telefonos", "redes_sociales"]
+    columnas = (["empresa", "sitio", "estado", "emails", "telefonos", "redes_sociales"]
                 + CATEGORIAS
                 + ["hallazgos_exposicion", "severidad_maxima", "seguridad_http"])
     sev_orden = {"crítica": 4, "alta": 3, "media": 2, "baja": 1}
@@ -345,6 +440,7 @@ def guardar_csv(resultados, ruta):
             sev_max = max((sev_orden.get(h["severidad"], 0) for h in exp), default=0)
             sev_txt = next((k for k, v in sev_orden.items() if v == sev_max), "-")
             fila = {
+                "empresa": r.get("empresa") or "",
                 "sitio": r.get("url_final", r["url_solicitada"]),
                 "estado": r["estado"],
                 "emails": "; ".join(r["contacto"]["emails"]),
@@ -397,7 +493,8 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
 
     for r in resultados:
         sitio = r.get("url_final", r["url_solicitada"])
-        partes.append(f"<h2>🌐 {_esc(sitio)}</h2>")
+        titulo = f"🏢 {_esc(r['empresa'])} — {_esc(sitio)}" if r.get("empresa") else f"🌐 {_esc(sitio)}"
+        partes.append(f"<h2>{titulo}</h2>")
         estado = _esc(r["estado"])
         partes.append(f"<p><b>Estado:</b> {estado} · <b>Páginas analizadas:</b> "
                       f"{len(r.get('paginas_analizadas', []))} · "
@@ -533,7 +630,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Auditor de información pública de sitios web "
                     "(stack tecnológico, contactos y exposición de datos).")
-    ap.add_argument("lista", nargs="?", help="Archivo de texto con una URL por línea (ej. empresas.txt)")
+    ap.add_argument("lista", nargs="?",
+                    help="Archivo de URLs: .txt (una por línea) o .csv/.tsv con una "
+                         "columna de sitios web (ej. empresas.txt, empresas_y_sitios_web.csv)")
     ap.add_argument("--salida", "-o", default="salida", help="Carpeta de resultados (defecto: salida/)")
     ap.add_argument("--max-paginas", type=int, default=12,
                     help="Páginas internas máx. por sitio (defecto: 12)")
@@ -555,25 +654,26 @@ def main(argv=None):
     if not args.lista:
         ap.error("falta el archivo de URLs (o usa --auto-test)")
 
-    with open(args.lista, encoding="utf-8") as f:
-        urls = [normalizar_url(l) for l in f if l.strip() and not l.strip().startswith("#")]
-    urls = [u for u in urls if u]
-    if not urls:
-        print("⚠️  El archivo no contiene URLs. Agrégalas una por línea (ver empresas.txt).")
+    lugares = cargar_lugares(args.lista)
+    if not lugares:
+        print("⚠️  No se encontraron URLs en el archivo. Formatos admitidos: .txt "
+              "(una por línea) o .csv/.tsv con una columna de sitios web.")
         return 2
 
     os.makedirs(args.salida, exist_ok=True)
-    print(f"🚀 Auditoría de {len(urls)} sitio(s) · salida en '{args.salida}/'")
+    print(f"🚀 Auditoría de {len(lugares)} sitio(s) · salida en '{args.salida}/'")
     if not args.ignorar_robots:
         print("   robots.txt: RESPETADO (usa --ignorar-robots solo con autorización)")
 
     resultados = []
-    for i, url in enumerate(urls, 1):
-        print(f"\n[{i}/{len(urls)}] {url}")
+    for i, lugar in enumerate(lugares, 1):
+        url, empresa = lugar["url"], lugar.get("empresa")
+        etiqueta = f"{empresa} <{url}>" if empresa else url
+        print(f"\n[{i}/{len(lugares)}] {etiqueta}")
         try:
-            res = auditar_sitio(url, args)
+            res = auditar_sitio(url, args, empresa=empresa)
         except Exception as e:  # nunca abortar el lote completo
-            res = {"url_solicitada": url, "estado": f"error inesperado: {e}",
+            res = {"url_solicitada": url, "empresa": empresa, "estado": f"error inesperado: {e}",
                    "tecnologias": {}, "contacto": {"emails": [], "telefonos": [], "redes_sociales": {}},
                    "exposicion_datos": [], "paginas_analizadas": [], "paginas_con_error": []}
         resultados.append(res)

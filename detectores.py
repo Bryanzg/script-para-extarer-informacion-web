@@ -161,6 +161,19 @@ def _contexto(texto, inicio, fin, radio=120):
     return texto[max(0, inicio - radio):fin + radio].lower()
 
 
+def _pegado_a_secuencia(texto, m):
+    """True si la coincidencia está pegada (antes o después) a más dígitos
+    separados solo por espacios/guiones/puntos/paréntesis — es decir, forma
+    parte de una secuencia numérica más larga (tarjeta, CLABE, folio...)."""
+    antes = texto[max(0, m.start() - 4):m.start()]
+    despues = texto[m.end():m.end() + 4]
+    if re.search(r"\d[\s.\-()]*$", antes):
+        return True
+    if re.match(r"^[\s.\-()]*\d", despues):
+        return True
+    return False
+
+
 def extraer_telefonos(texto, tel_links):
     """
     Teléfonos desde enlaces tel: y desde el texto visible.
@@ -178,7 +191,7 @@ def extraer_telefonos(texto, tel_links):
     for m in RE_TEL_INTL.finditer(texto or ""):
         crudo = m.group(0).strip()
         digitos = re.sub(r"\D", "", crudo)
-        if 9 <= len(digitos) <= 15:
+        if 9 <= len(digitos) <= 15 and not _pegado_a_secuencia(texto, m):
             hallazgos.setdefault(
                 digitos, {"numero": crudo, "tipo": "formato internacional", "confianza": "alta"})
 
@@ -187,6 +200,8 @@ def extraer_telefonos(texto, tel_links):
         digitos = re.sub(r"\D", "", crudo)
         if not (10 <= len(digitos) <= 12):
             continue
+        if _pegado_a_secuencia(texto, m):
+            continue  # es un fragmento de una secuencia más larga (tarjeta, CLABE…)
         ctx = _contexto(texto, m.start(), m.end())
         if any(kw in ctx for kw in _KW_TELEFONO):
             hallazgos.setdefault(
