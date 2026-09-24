@@ -42,12 +42,13 @@ import requests
 from bs4 import BeautifulSoup
 
 from detectores import (analizar_seguridad_http, clasificar_negocio,
-                        detectar_exposicion, detectar_tecnologias,
+                        descubrir_categoria, detectar_exposicion,
+                        detectar_tecnologias,
                         etiqueta_categoria, extraer_emails,
                         extraer_redes_sociales, extraer_telefonos,
                         minar_html)
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 UA_DEFECTO = "WebAuditBot/1.0 (+auditoria-autorizada; contacto: configurar-con --user-agent)"
 
 # Rutas internas prioritarias: ahí suelen estar contacto, datos legales y pagos
@@ -551,9 +552,21 @@ def auditar_sitio(url, cfg, empresa=None):
     es_tienda = bool(resultado["tecnologias"].get("Ecommerce")) or any(
         "WooCommerce" in t or "Shopify" in t
         for t in resultado["tecnologias"].get("CMS", []))
-    resultado["categoria_negocio"] = clasificar_negocio(
+    cat_neg = clasificar_negocio(
         texto_cat, mineria.get("metadatos"),
         mineria.get("datos_estructurados_jsonld"), es_tienda)
+    # si el catálogo no la identifica (o muy débil), se intenta DESCUBRIR una
+    # categoría nueva desde @types sin mapear o palabras dominantes
+    if not cat_neg.get("categoria") or cat_neg.get("confianza") == "baja":
+        descubierta = descubrir_categoria(
+            texto_cat, mineria.get("metadatos"),
+            mineria.get("datos_estructurados_jsonld"), es_tienda)
+        if descubierta and (not cat_neg.get("categoria")
+                            or descubierta["fuente"].startswith("JSON-LD")):
+            if cat_neg.get("categoria"):
+                descubierta["alternativa_catalogo"] = cat_neg["categoria"]
+            cat_neg = descubierta
+    resultado["categoria_negocio"] = cat_neg
 
     exposicion = []
     for pag in paginas_ok[: cfg.max_paginas_exposicion]:
@@ -649,6 +662,52 @@ def _tabla_pares(pares, cabeceras):
     return f"<table><thead><tr>{''.join(f'<th>{_esc(c)}</th>' for c in cabeceras)}</tr></thead><tbody>{filas}</tbody></table>"
 
 
+def registrar_categorias_nuevas(resultados, ruta):
+    """
+    Registro acumulativo de categorías descubiertas automáticamente.
+
+    Lee/actualiza <salida>/categorias_descubiertas.json: por cada categoría
+    nueva guarda cuántas veces se ha visto, en qué sitios y la fuente del
+    descubrimiento, para decidir si merece entrar al catálogo fijo.
+    Devuelve la lista de nombres descubiertos en ESTA ejecución.
+    """
+    registro = {}
+    if os.path.exists(ruta):
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                registro = json.load(f)
+        except Exception:
+            registro = {}
+    ahora = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    descubiertas = []
+    for r in resultados:
+        cat = r.get("categoria_negocio") or {}
+        if not (cat.get("nueva") and cat.get("categoria")):
+            continue
+        nombre = cat["categoria"]
+        entrada = registro.get(nombre) or {
+            "primera_deteccion": ahora, "veces": 0,
+            "fuente": cat.get("fuente", ""), "sitios": []}
+        entrada["ultima_deteccion"] = ahora
+        entrada["veces"] = int(entrada.get("veces", 0)) + 1
+        entrada["fuente"] = cat.get("fuente", entrada.get("fuente", ""))
+        sitio = r.get("url_final") or r.get("url_solicitada", "")
+        if sitio and sitio not in entrada["sitios"]:
+            entrada["sitios"].append(sitio)
+        entrada["sitios"] = entrada["sitios"][:25]
+        entrada["tienda_online"] = (bool(entrada.get("tienda_online"))
+                                    or bool(cat.get("tienda_online")))
+        entrada["sugerencia"] = ("Si se repite en varios sitios, agrégala a "
+                                 "CATEGORIAS_NEGOCIO en detectores.py con sus "
+                                 "palabras clave.")
+        registro[nombre] = entrada
+        descubiertas.append(nombre)
+    if descubiertas:
+        with open(ruta, "w", encoding="utf-8") as f:
+            json.dump(registro, f, ensure_ascii=False, indent=2)
+    return sorted(set(descubiertas))
+
+
 def guardar_html(resultados, ruta):
     partes = [f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Reporte de auditoría web</title><style>{_CSS}</style></head><body>
@@ -668,11 +727,13 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
                       f"<b>Seguridad HTTP:</b> {_esc(r.get('seguridad_http', {}).get('puntuacion', '-'))}</p>")
         if r.get("categoria_negocio"):
             catn = r["categoria_negocio"]
+            nueva_txt = (f" · 🆕 descubierta automáticamente ({_esc(catn.get('fuente', ''))})"
+                         if catn.get("nueva") else "")
             ev = (" · evidencia: " + _esc(", ".join(catn.get("evidencia", [])[:4]))
                   if catn.get("evidencia") else "")
             partes.append(f"<p>🏷️ <b>Categoría detectada:</b> "
                           f"<span class='etiqueta cat'>{_esc(etiqueta_categoria(catn))}</span>"
-                          f"<small>{ev}</small></p>")
+                          f"<small>{nueva_txt}{ev}</small></p>")
 
         tech = r.get("tecnologias", {})
         if tech:
@@ -829,6 +890,20 @@ def auto_test():
                                   {}, [{"tipo": "PetStore"}], es_tienda=True)
     cat_vacia = clasificar_negocio("xyz qqq www", {}, [], es_tienda=False)
 
+    # descubrimiento de categorías NUEVAS
+    from detectores import descubrir_categoria
+    nueva_ld = descubrir_categoria("xyz qqq www", {},
+                                   [{"tipo": "ArtGallery"}], es_tienda=False)
+    txt_amig = ("Amigurumis tejidos a mano en crochet. amigurumis "
+                "personalizados, patrones de amigurumis kawaii.") * 3
+    nueva_kw = descubrir_categoria(
+        txt_amig, {"title": "Amigurumis MX | amigurumis de crochet",
+                   "description": "venta de amigurumis tejidos"}, [],
+        es_tienda=True)
+    nada_generico = descubrir_categoria("xyz qqq www", {},
+                                        [{"tipo": "WebPage, Organization"}],
+                                        es_tienda=False)
+
     todas = [t for lst in tech.values() for t in lst]
     tipos_exp = {h["tipo"] for h in expo}
 
@@ -878,6 +953,16 @@ def auto_test():
         ("Clasificador: PetStore JSON-LD -> Mascotas",
          cat_pets["categoria"] == "Mascotas" and cat_pets["confianza"] == "alta"),
         ("Clasificador: sin señal -> no identificada", cat_vacia["categoria"] is None),
+        ("Descubrimiento: @type desconocido -> categoría nueva [media]",
+         nueva_ld is not None and nueva_ld.get("nueva")
+         and nueva_ld["categoria"] == "Art gallery"
+         and nueva_ld["confianza"] == "media"),
+        ("Descubrimiento: palabras dominantes -> categoría nueva [baja]",
+         nueva_kw is not None and nueva_kw.get("nueva")
+         and "amigurumi" in nueva_kw["categoria"].lower()
+         and nueva_kw["tienda_online"] is True),
+        ("Descubrimiento: tipos genéricos NO generan categoría",
+         nada_generico is None),
     ]
 
     fallos = 0
@@ -959,12 +1044,20 @@ def main(argv=None):
     guardar_json(resultados, os.path.join(args.salida, "resultado_completo.json"))
     guardar_csv(resultados, os.path.join(args.salida, "resumen.csv"))
     guardar_html(resultados, os.path.join(args.salida, "reporte.html"))
+    nuevas = registrar_categorias_nuevas(
+        resultados, os.path.join(args.salida, "categorias_descubiertas.json"))
 
     print("\n📦 Archivos generados:")
     print(f"   • {args.salida}/reporte.html            (reporte visual consolidado)")
     print(f"   • {args.salida}/resumen.csv             (tabla consolidada, abre en Excel)")
     print(f"   • {args.salida}/resultado_completo.json (JSON con todo el detalle)")
     print(f"   • {args.salida}/<dominio>.json          (un JSON detallado por sitio)")
+    if nuevas:
+        print(f"\n🆕 Categorías NUEVAS descubiertas ({len(nuevas)}): "
+              f"{', '.join(nuevas)}")
+        print(f"   • {args.salida}/categorias_descubiertas.json "
+              f"(registro acumulativo; si alguna se repite, agrégala a "
+              f"CATEGORIAS_NEGOCIO en detectores.py)")
     return 0
 
 

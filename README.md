@@ -109,7 +109,7 @@ Dependencias: `requests` y `beautifulsoup4` (Python ≥ 3.9).
 python extractor.py --auto-test
 ```
 
-Ejecuta 28 auto-pruebas de los detectores contra un HTML de muestra (no requiere Internet).
+Ejecuta 35 auto-pruebas de los detectores contra un HTML de muestra (no requiere Internet).
 
 ### Opciones
 
@@ -220,6 +220,23 @@ El resultado incluye **`confianza`** (alta/media/baja según puntuación) y la
 `CATEGORIAS_NEGOCIO` y `TIPO_LD_A_CATEGORIA` en `detectores.py`.
 
 Ejemplo (californialeaf.com.mx): `Cannabis / CBD y smoke shop — tienda online [alta]`.
+
+### 🆕 Descubrimiento automático de categorías nuevas
+
+Si un sitio **no encaja en ninguna vertical del catálogo** (o la evidencia es
+muy débil), el extractor intenta **crear la categoría por sí mismo**:
+
+1. **`@type` de Schema.org no mapeado** — p. ej. `ArtGallery` → se propone
+   `Art gallery` con confianza *media* (los tipos genéricos `WebPage`,
+   `Organization`, `Product`… se ignoran para no inventar ruido).
+2. **Palabras dominantes** del título, metas y primeros párrafos — p. ej. un
+   sitio de renta de inflables → `Inflables` con confianza *baja*.
+
+Las categorías descubiertas viajan marcadas con **🆕** en el CSV, el HTML y el
+JSON (`"nueva": true`, con la `fuente` del descubrimiento), y se acumulan en
+**`<salida>/categorias_descubiertas.json`**: cuántas veces se ha visto cada
+una, en qué sitios y la sugerencia de incorporarla a `CATEGORIAS_NEGOCIO`
+en `detectores.py` si se repite (así el catálogo crece con el uso real).
 
 ## 🧬 Minería profunda del código fuente
 

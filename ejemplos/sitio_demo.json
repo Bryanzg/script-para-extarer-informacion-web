@@ -1,7 +1,7 @@
 {
   "url_solicitada": "http://localhost:8934",
-  "empresa": "Acme Pets (sitio ficticio de prueba)",
-  "fecha_auditoria": "2026-09-24T18:01:54",
+  "empresa": "Acme Pets",
+  "fecha_auditoria": "2026-09-24T18:50:27",
   "paginas_analizadas": [
     "http://localhost:8934/",
     "http://localhost:8934/contacto/"
@@ -13,33 +13,18 @@
   "codigo_http": 200,
   "tecnologias": {
     "CMS": [
-      "Elementor (page builder)",
-      "WooCommerce (REST API)",
-      "WooCommerce (plugin)",
-      "WordPress"
+      "WooCommerce (plugin)"
     ],
     "Ecommerce": [
       "WooCommerce"
-    ],
-    "Analytics": [
-      "Google Tag Manager"
-    ],
-    "Frameworks": [
-      "Bootstrap"
     ]
   },
   "contacto": {
     "emails": [
-      "contacto@acmepets.mx",
       "info@acmepets.mx",
       "ventas@acmepets.mx"
     ],
     "telefonos": [
-      {
-        "numero": "+52 55 8000 1234",
-        "tipo": "formato internacional",
-        "confianza": "alta"
-      },
       {
         "numero": "+52 55 9000 7788",
         "tipo": "JSON-LD (datos estructurados)",
@@ -48,7 +33,7 @@
     ],
     "redes_sociales": {
       "Instagram": [
-        "https://www.instagram.com/acme.pets"
+        "https://instagram.com/acmepets.mx"
       ]
     },
     "direcciones": [
@@ -57,15 +42,14 @@
   },
   "codigo_fuente": {
     "metadatos": {
-      "generator": "WordPress 6.5.4",
-      "description": "Tienda de mascotas: croquetas premium, arena para gato, juguetes y accesorios para perros. Envío a todo México.",
-      "keywords": "mascotas, pet shop, croquetas, perros, gatos, veterinaria"
+      "description": "Alimento y accesorios para mascotas: croquetas para perros y gatos, juguetes y arena para gato.",
+      "keywords": "mascotas, croquetas, perros, gatos, veterinaria",
+      "title": "Acme Pets — Tienda de mascotas"
     },
     "datos_estructurados_jsonld": [
       {
         "tipo": "PetStore",
-        "nombre": "Acme Pets",
-        "url": "http://localhost:8931/"
+        "nombre": "Acme Pets"
       },
       {
         "tipo": "PostalAddress"
@@ -75,23 +59,10 @@
     "feeds": [],
     "comentarios_reveladores": [],
     "emails_solo_en_codigo": [
-      "contacto@acmepets.mx",
       "info@acmepets.mx",
       "ventas@acmepets.mx"
     ],
-    "shopify": {},
-    "wordpress_rest": {
-      "nombre_sitio": "Acme Pets",
-      "descripcion": "Petshop",
-      "url": "http://localhost:8931",
-      "home": null,
-      "timezone": "America/Mexico_City",
-      "namespaces": [
-        "wp/v2",
-        "oembed/1.0",
-        "wc/v3"
-      ]
-    }
+    "shopify": {}
   },
   "categoria_negocio": {
     "categoria": "Mascotas",
@@ -101,20 +72,19 @@
     "puntuaciones": [
       {
         "categoria": "Mascotas",
-        "puntos": 46
+        "puntos": 44
       },
       {
-        "categoria": "Electrónica y gadgets",
-        "puntos": 2
+        "categoria": "Infantil y juguetes",
+        "puntos": 8
       }
     ],
     "evidencia": [
       "JSON-LD @type: PetStore",
-      "kw fuerte: mascota",
+      "kw fuerte: mascotas",
       "kw fuerte: perros",
       "kw fuerte: gatos",
-      "kw fuerte: croquetas",
-      "kw apoyo: arena para gato"
+      "kw fuerte: croquetas"
     ]
   },
   "exposicion_datos": [
@@ -124,7 +94,7 @@
       "severidad": "alta",
       "pagina": "http://localhost:8934/contacto/",
       "nota": "",
-      "contexto": "s@acmepets.mx · Adiestramiento canino y estética para mascotas. BBVA CLABE interbancaria: 0121************65 (transferencia SPEI)"
+      "contexto": "Contacto — Acme Pets ventas@acmepets.mx CLABE BBVA: 0121************65"
     }
   ],
   "seguridad_http": {

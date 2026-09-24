@@ -568,6 +568,8 @@ def minar_metadatos(sopa):
             continue
         if clave in _METAS_INTERES and clave not in metas:
             metas[clave] = contenido[:300]
+    if sopa.title and sopa.title.string:
+        metas.setdefault("title", sopa.title.string.strip()[:300])
     for clave in ("twitter:site", "twitter:creator"):
         usuario = metas.get(clave, "").lstrip("@").strip()
         if usuario and re.fullmatch(r"[A-Za-z0-9_]{1,30}", usuario):
@@ -901,7 +903,7 @@ def clasificar_negocio(texto, metadatos=None, objetos_ld=None, es_tienda=False):
     texto = (texto or "")[:500_000].lower()
     metadatos = metadatos or {}
     meta_txt = " ".join(str(metadatos.get(k, "")) for k in
-                        ("description", "keywords", "author", "og:title",
+                        ("title", "description", "keywords", "author", "og:title",
                          "og:site_name", "og:description")).lower()
 
     puntuaciones, evidencia = {}, {}
@@ -965,4 +967,157 @@ def etiqueta_categoria(cat):
         base += " — tienda online"
     if cat.get("secundaria"):
         base += f" · 2ª: {cat['secundaria']}"
+    if cat.get("nueva"):
+        base = f"🆕 {base}"
     return f"{base} [{cat.get('confianza', '?')}]"
+
+
+# ---------------------------------------------------------------------------
+# 6.1 Descubrimiento automático de categorías NUEVAS
+# ---------------------------------------------------------------------------
+# Si el catálogo (CATEGORIAS_NEGOCIO) no logra clasificar un sitio, se propone
+# una categoría nueva a partir de dos señales:
+#   A) un @type de Schema.org que aún no está mapeado en TIPO_LD_A_CATEGORIA
+#      (p. ej. "ArtGallery" -> "Art gallery")
+#   B) las palabras dominantes del título/metas/texto visible
+# Los descubrimientos se marcan con "nueva": True y el orquestador los registra
+# en <salida>/categorias_descubiertas.json para revisión humana.
+
+# @types genéricos: no describen un vertical de negocio (forma normalizada)
+TIPOS_LD_GENERICOS = {
+    "thing", "intangible", "structuredvalue", "creativework", "article",
+    "newsarticle", "blogposting", "blog", "webpage", "website", "webpageelement",
+    "collectionpage", "contactpage", "aboutpage", "faqpage", "qapage",
+    "itempage", "profilepage", "checkoutpage", "searchresultspage",
+    "medicalwebpage", "breadcrumblist", "itemlist", "listitem",
+    "organization", "onlinebusiness", "localbusiness", "business",
+    "corporation", "company", "enterprise", "store", "brand", "person",
+    "place", "postaladdress", "contactpoint", "geocoordinates", "geo",
+    "product", "individualproduct", "productmodel", "someproducts",
+    "productgroup", "offer", "aggregateoffer", "demand", "service",
+    "event", "businessevent", "videoobject", "imageobject", "audioobject",
+    "mediaobject", "digitaldocument", "datafeed", "dataset", "datacatalog",
+    "sitedesignelement", "sitenavigationelement", "wpheader", "wpfooter",
+    "wpsidebar", "wpadblock", "table", "webapi", "entrypoint", "comment",
+    "answer", "question", "review", "aggregaterating", "rating",
+    "monetaryamount", "pricespecification", "unitpricespecification",
+    "quantitativevalue", "openinghoursspecification", "audience",
+    "administrativearea", "country", "city", "language", "date", "datetime",
+    "jobposting", "carousel", "softwareapplication",  # ya mapeada a SaaS
+}
+
+# Sufijos de @type que delatan elementos web, no negocios
+_SUFIJOS_LD_WEB = ("page", "list", "element", "action", "schema", "markup",
+                   "widget", "embed", "block", "menu", "form", "search")
+
+# Palabras que NO deben convertirse en categoría (stopwords ES + vocabulario web)
+_PALABRAS_NO_CATEGORIA = {
+    # español general
+    "años", "aqui", "aquí", "cada", "como", "cómo", "con", "cuando",
+    "cuándo", "cual", "cuál", "dentro", "desde", "donde", "dónde", "entre",
+    "esta", "está", "están", "estas", "este", "estos", "hacer", "hacia",
+    "hasta", "llama", "llamanos", "llámanos", "mas", "más", "mejor",
+    "mejores", "mismo", "mucho", "muy", "otra", "otras", "otro", "otros",
+    "para", "parte", "pero", "por", "porque", "puede", "pueden", "puedes",
+    "qué", "que", "quién", "quien", "quieres", "sabe", "sabrás", "ser",
+    "solo", "sólo", "somos", "son", "sobre", "sus", "también", "tambien",
+    "tenemos", "tener", "tenga", "tenido", "tiene", "tienen", "todo",
+    "todas", "todos", "trabajo", "una", "unas", "uno", "unos", "veces",
+    "visita", "visítanos", "conoce", "conocer", "hacemos", "ofrecemos",
+    "contamos", "encuentra", "encuentras", "encuentran", "nuestra",
+    "nuestras", "nuestro", "nuestros", "usted", "ustedes",
+    # vocabulario web/genérico de sitios
+    "asesoria", "asesoría", "atencion", "atención", "bienvenido",
+    "bienvenidos", "blog", "calidad", "carrito", "catalogo", "catálogo",
+    "cliente", "clientes", "compra", "comprar", "compras", "contactanos",
+    "contáctanos", "contacto", "derechos", "empresa", "envio", "envío",
+    "envios", "envíos", "equipo", "experiencia", "garantia", "garantía",
+    "gratis", "home", "horario", "horarios", "inicio", " línea", "linea",
+    "marca", "marcas", "mayoreo", "menudeo", "mexico", "méxico",
+    "nosotros", "nuevo", "nuevos", "oferta", "ofertas", "oficina",
+    "oficial", "online", "pagina", "página", "pedido", "pedidos", "precio",
+    "precios", "producto", "productos", "profesional", "profesionales",
+    "reservados", "servicio", "servicios", "sitio", "soluciones",
+    "tienda", "ubicacion", "ubicación", "venta", "ventas", "web",
+    "whatsapp", "telefono", "teléfono", "direccion", "dirección",
+    "privacidad", "aviso", "terminos", "términos", "condiciones",
+    "cookies", "copyright",
+}
+
+
+def _normalizar_tipo_ld(tipo):
+    return re.sub(r"[^a-z0-9]", "", (tipo or "").lower())
+
+
+def _humanizar_tipo_ld(tipo):
+    """'ArtGallery' -> 'Art gallery'; 'smoke-shop' -> 'Smoke shop'."""
+    partes = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", str(tipo).strip())
+    partes = re.sub(r"[-_:/]+", " ", partes)
+    partes = " ".join(partes.split())
+    if not partes:
+        return ""
+    return partes[0].upper() + partes[1:].lower()
+
+
+def _tipos_ld_individuales(objetos_ld):
+    """Cada objeto resume sus tipos en la clave 'tipo' (puede traer varios)."""
+    for obj in objetos_ld or []:
+        for trozo in re.split(r"[,;\s]+", str(obj.get("tipo", ""))):
+            if trozo:
+                yield trozo
+
+
+def _tipo_ya_mapeado(norm):
+    return any(clave in norm for clave in TIPO_LD_A_CATEGORIA)
+
+
+def descubrir_categoria(texto, metadatos=None, objetos_ld=None, es_tienda=False):
+    """
+    Propone una categoría NUEVA cuando el catálogo no clasifica el sitio.
+
+    Devuelve dict con las mismas claves que clasificar_negocio() más
+    "nueva": True y "fuente", o None si no hay señal suficiente.
+    """
+    metadatos = metadatos or {}
+
+    # A) @type de Schema.org no mapeado ni genérico
+    for tipo in _tipos_ld_individuales(objetos_ld):
+        norm = _normalizar_tipo_ld(tipo)
+        if (len(norm) < 4 or norm in TIPOS_LD_GENERICOS
+                or _tipo_ya_mapeado(norm)
+                or norm.endswith(_SUFIJOS_LD_WEB)):
+            continue
+        nombre = _humanizar_tipo_ld(tipo)
+        if nombre:
+            return {"categoria": nombre, "secundaria": None,
+                    "confianza": "media", "tienda_online": bool(es_tienda),
+                    "puntuaciones": [], "nueva": True,
+                    "fuente": f"JSON-LD @type: {tipo}",
+                    "evidencia": [f"@type sin mapear en el catálogo: {tipo}"]}
+
+    # B) palabras dominantes (título y metas pesan más que el cuerpo)
+    from collections import Counter
+    ponderado = " ".join([
+        " ".join([str(metadatos.get("title", ""))] * 3),
+        " ".join([str(metadatos.get("og:title", ""))] * 2),
+        " ".join([str(metadatos.get("description", ""))] * 2),
+        " ".join([str(metadatos.get("keywords", ""))] * 2),
+        str(metadatos.get("og:site_name", "")),
+        (texto or "")[:4000],
+    ]).lower()
+    frec = Counter(p for p in re.findall(r"[a-záéíóúüñ][a-záéíóúüñ0-9-]{2,}",
+                                         ponderado)
+                   if len(p) >= 4 and p not in _PALABRAS_NO_CATEGORIA)
+    top = frec.most_common(3)
+    if not top or top[0][1] < 4:
+        return None
+    principal, n1 = top[0]
+    nombre = principal.capitalize()
+    if (len(top) > 1 and top[1][1] >= 0.5 * n1
+            and top[1][0][:5] != principal[:5]):
+        nombre = f"{nombre} y {top[1][0]}"
+    return {"categoria": nombre, "secundaria": None, "confianza": "baja",
+            "tienda_online": bool(es_tienda), "puntuaciones": [],
+            "nueva": True,
+            "fuente": f"palabras dominantes: {', '.join(p for p, _ in top)}",
+            "evidencia": [f"palabra dominante: {p} ({n}×)" for p, n in top]}
