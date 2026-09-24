@@ -1,22 +1,28 @@
 {
   "url_solicitada": "http://localhost:8931",
   "empresa": "Acme Demo (sitio ficticio de prueba)",
-  "fecha_auditoria": "2026-09-24T16:12:00",
+  "fecha_auditoria": "2026-09-24T17:19:21",
   "paginas_analizadas": [
-    "http://localhost:8931/",
-    "http://localhost:8931/aviso-legal/",
     "http://localhost:8931/contacto/",
-    "http://localhost:8931/agenda/"
+    "http://localhost:8931/aviso-legal/",
+    "http://localhost:8931/",
+    "http://localhost:8931/pagina-solo-sitemap/"
   ],
   "paginas_con_error": [],
   "duracion_segundos": 0.0,
   "estado": "ok",
-  "url_final": "http://localhost:8931/",
+  "url_final": "http://localhost:8931/contacto/",
   "codigo_http": 200,
   "tecnologias": {
     "CMS": [
+      "Contact Form 7 (REST)",
+      "Elementor (REST)",
+      "Elementor (page builder)",
+      "WooCommerce (REST API)",
       "WooCommerce (plugin)",
-      "WordPress"
+      "WordPress",
+      "Yoast SEO (REST)",
+      "Yoast SEO (plugin)"
     ],
     "Ecommerce": [
       "WooCommerce"
@@ -30,19 +36,8 @@
     "Payments": [
       "Stripe"
     ],
-    "Chat y soporte": [
-      "Tawk.to",
-      "WhatsApp (widget/enlace)"
-    ],
-    "Consent": [
-      "OneTrust"
-    ],
-    "Scheduling": [
-      "Calendly"
-    ],
     "Frameworks": [
-      "Bootstrap",
-      "jQuery"
+      "Bootstrap"
     ],
     "CDN y hosting": [
       "Cloudflare"
@@ -54,7 +49,11 @@
   "contacto": {
     "emails": [
       "contacto@acme-demo.mx",
+      "director@acme-demo.mx",
       "facturacion@acme-demo.mx",
+      "info@acme-demo.mx",
+      "oculto@acme-demo.mx",
+      "soporte@acme-demo.mx",
       "ventas@acme-demo.mx"
     ],
     "telefonos": [
@@ -67,31 +66,114 @@
         "numero": "+52 55 8000 1234",
         "tipo": "formato internacional",
         "confianza": "alta"
+      },
+      {
+        "numero": "+52 55 9000 7788",
+        "tipo": "JSON-LD (datos estructurados)",
+        "confianza": "alta"
+      },
+      {
+        "numero": "+52 833 210 4455",
+        "tipo": "JSON-LD (datos estructurados)",
+        "confianza": "alta"
       }
     ],
     "redes_sociales": {
-      "GitHub": [
-        "https://github.com/acme-demo/api-client"
-      ],
       "Instagram": [
         "https://www.instagram.com/acme.demo"
       ],
       "LinkedIn": [
-        "https://mx.linkedin.com/company/acme-demo"
+        "https://mx.linkedin.com/company/acme-demo",
+        "https://www.linkedin.com/company/acme-demo"
       ],
-      "WhatsApp": [
-        "https://wa.me/5215580001234"
+      "TikTok": [
+        "https://www.tiktok.com/@acme.demo"
+      ],
+      "X / Twitter": [
+        "https://x.com/acme_demo_corp"
+      ]
+    },
+    "direcciones": [
+      "Blvd. Adolfo López Mateos 2025, Tampico, TAM, 89040, MX"
+    ]
+  },
+  "codigo_fuente": {
+    "metadatos": {
+      "generator": "WordPress 6.5.4",
+      "description": "Acme Demo — venta de widgets de prueba, CDMX",
+      "og:site_name": "Acme Demo Corporativo",
+      "twitter:site": "@acme_demo_corp",
+      "geo.position": "19.4326;-99.1332",
+      "theme-color": "#0d6efd"
+    },
+    "datos_estructurados_jsonld": [
+      {
+        "tipo": "Organization",
+        "nombre": "Acme Demo, S.A. de C.V.",
+        "url": "http://localhost:8931/"
+      },
+      {
+        "tipo": "PostalAddress"
+      },
+      {
+        "tipo": "ContactPoint"
+      }
+    ],
+    "formularios": [
+      {
+        "accion": "http://localhost:8931/contacto/enviar",
+        "metodo": "POST",
+        "campos": [
+          "nombre:text",
+          "correo:email",
+          "mensaje:textarea"
+        ]
+      }
+    ],
+    "feeds": [
+      {
+        "tipo": "application/rss+xml",
+        "url": "http://localhost:8931/feed.xml"
+      }
+    ],
+    "comentarios_reveladores": [
+      "This site is optimized with the Yoast SEO plugin v22.1",
+      "Tema hijo: AcmeTheme v2.3.1 desarrollado por Estudio Pixel MX"
+    ],
+    "emails_solo_en_codigo": [
+      "contacto@acme-demo.mx",
+      "director@acme-demo.mx",
+      "facturacion@acme-demo.mx",
+      "info@acme-demo.mx",
+      "oculto@acme-demo.mx",
+      "soporte@acme-demo.mx",
+      "ventas@acme-demo.mx"
+    ],
+    "shopify": {},
+    "wordpress_rest": {
+      "nombre_sitio": "Acme Demo, S.A. de C.V.",
+      "descripcion": "Widgets de prueba desde 2015",
+      "url": "http://localhost:8931",
+      "home": "http://localhost:8931",
+      "timezone": "America/Mexico_City",
+      "namespaces": [
+        "wp/v2",
+        "oembed/1.0",
+        "contact-form-7/v1",
+        "wc/v3",
+        "yoast/v1",
+        "elementor/v1"
       ]
     }
   },
   "exposicion_datos": [
     {
-      "tipo": "Clave pública de Stripe (pk_live)",
-      "valor_enmascarado": "pk_l*********************************Wx",
-      "severidad": "baja",
-      "pagina": "http://localhost:8931/",
-      "nota": "pk_live es pública por diseño; se reporta para confirmar que el sitio usa Stripe. Revisar que NO exista sk_live.",
-      "contexto": "<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script> <script>var cfg={key:\"pk_l*********************************Wx\"};</script> </head><body class=\"woocommerce\"> <h1>Acme Demo — Corporativo</h1> <"
+      "tipo": "CLABE interbancaria expuesta (18 dígitos)",
+      "valor_enmascarado": "0121************65",
+      "severidad": "alta",
+      "pagina": "http://localhost:8931/contacto/",
+      "nota": "",
+      "contexto": "ntacto Ventas: ventas@acme-demo.mx WhatsApp: +5215*******44BBVA CLABE interbancaria: 0121************65 (solo transferencia SPEI)"
     },
     {
       "tipo": "Número de tarjeta con formato válido (Luhn)",
@@ -99,31 +181,7 @@
       "severidad": "crítica",
       "pagina": "http://localhost:8931/aviso-legal/",
       "nota": "",
-      "contexto": "l y privacidad Facturación: facturacion@acme-demo.mx Test card visible por error del dev: 4242**********42Github: repo público"
-    },
-    {
-      "tipo": "IBAN expuesto (ES)",
-      "valor_enmascarado": "ES91******************32",
-      "severidad": "alta",
-      "pagina": "http://localhost:8931/contacto/",
-      "nota": "",
-      "contexto": "765 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91******************32"
-    },
-    {
-      "tipo": "CLABE interbancaria expuesta (18 dígitos)",
-      "valor_enmascarado": "0121************65",
-      "severidad": "alta",
-      "pagina": "http://localhost:8931/contacto/",
-      "nota": "",
-      "contexto": "at] acme-demo [dot] mx WhatsApp: +5215*******44Banco CLABE BBVA CLABE interbancaria: 0121************65 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91 2100 0418"
-    },
-    {
-      "tipo": "Código SWIFT/BIC expuesto",
-      "valor_enmascarado": "BCMR*****YM",
-      "severidad": "media",
-      "pagina": "http://localhost:8931/contacto/",
-      "nota": "",
-      "contexto": "interbancaria: 0121************65 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91******************32"
+      "contexto": "Aviso legal Facturación: facturacion@acme-demo.mx Test card visible por error del dev: 4242**********42"
     }
   ],
   "seguridad_http": {

@@ -109,7 +109,7 @@ Dependencias: `requests` y `beautifulsoup4` (Python ≥ 3.9).
 python extractor.py --auto-test
 ```
 
-Ejecuta 17 auto-pruebas de los detectores contra un HTML de muestra (no requiere Internet).
+Ejecuta 28 auto-pruebas de los detectores contra un HTML de muestra (no requiere Internet).
 
 ### Opciones
 
@@ -200,13 +200,33 @@ Telegram, Pinterest, GitHub, Threads, Snapchat, Discord, Vimeo y Mercado Libre.
 Las firmas viven en [`firmas_tecnologia.py`](firmas_tecnologia.py) y están pensadas para
 editarse fácilmente: agrega una entrada con el nombre, categoría y expresiones regulares.
 
+## 🧬 Minería profunda del código fuente
+
+El extractor **no se queda en el texto visible**: cada página se descarga en crudo
+(HTML completo, cabeceras HTTP y cookies) y además se mina su fuente:
+
+| Evidencia | Qué se extrae |
+|---|---|
+| **JSON-LD / Schema.org** (`<script type="application/ld+json">`) | Organization, LocalBusiness, ContactPoint… → **emails, teléfonos (confianza alta), direcciones físicas, geo-coordenadas y redes `sameAs`** |
+| **Metadatos** | `description`, `keywords`, `og:site_name`, `generator`, `theme-color`, `author`, **`geo.position`** (GPS del negocio), **`twitter:site`** → perfil de X |
+| **HTML crudo (atributos/JS)** | Emails escondidos en `data-*`, JSON embebido, blobs de configuración |
+| **Comentarios HTML** | Huellas de tema/plantilla, versión, "desarrollado por…" (sanitizados) |
+| **Formularios** | Destino (`action`), método y campos que captura el sitio |
+| **Feeds** | Enlaces RSS/Atom declarados |
+| **robots.txt + sitemap.xml** | Rutas declaradas en `Sitemap:` y del sitemap → la auditoría visita páginas **aunque no estén enlazadas** en la portada |
+| **WordPress REST (`/wp-json/`)** | Nombre del sitio, descripción, zona horaria y **namespaces que delatan plugins activos** (WooCommerce, Contact Form 7, Yoast, Elementor, Rank Math… detectados por API, no solo por HTML) |
+| **Shopify (`window.Shopify`)** | Dominio `*.myshopify.com` original y **nombre/versión del tema** |
+
+Todo esto aparece en el JSON bajo la clave `codigo_fuente` y en el reporte HTML
+como sección "🧬 Información del código fuente".
+
 ## 🏗️ Arquitectura
 
 | Archivo | Responsabilidad |
 |---|---|
-| `extractor.py` | CLI, rastreador (portada + páginas internas prioritarias como /contacto, /aviso-legal, /privacidad, /tienda…), robots.txt, orquestación y salidas (JSON/CSV/HTML). |
-| `firmas_tecnologia.py` | Catálogo de ~220 firmas tecnológicas editables. |
-| `detectores.py` | Fingerprinting, extracción de emails/teléfonos/redes, detección DLP de datos sensibles (con enmascarado) y análisis de cabeceras de seguridad. |
+| `extractor.py` | CLI, rastreador (portada + páginas internas prioritarias + **sitemap.xml**), robots.txt, sondeo `wp-json`, orquestación y salidas (JSON/CSV/HTML). |
+| `firmas_tecnologia.py` | Catálogo de ~230 firmas tecnológicas editables. |
+| `detectores.py` | Fingerprinting, contactos, DLP de datos sensibles (enmascarado), cabeceras de seguridad y **minería profunda del código fuente** (`minar_html`). |
 
 ## ⚠️ Limitaciones conocidas
 

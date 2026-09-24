@@ -43,9 +43,10 @@ from bs4 import BeautifulSoup
 
 from detectores import (analizar_seguridad_http, detectar_exposicion,
                         detectar_tecnologias, extraer_emails,
-                        extraer_redes_sociales, extraer_telefonos)
+                        extraer_redes_sociales, extraer_telefonos,
+                        minar_html)
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 UA_DEFECTO = "WebAuditBot/1.0 (+auditoria-autorizada; contacto: configurar-con --user-agent)"
 
 # Rutas internas prioritarias: ahí suelen estar contacto, datos legales y pagos
@@ -261,20 +262,85 @@ class Rastreador:
         except requests.RequestException as e:
             return {"url": url, "error": f"{type(e).__name__}: {e}"}
 
+    # ---- sitemap.xml / robots.txt (descubrimiento profundo) ----------
+    def obtener_urls_sitemap(self, url_inicial, limite=25):
+        """Descubre URLs internas vía 'Sitemap:' de robots.txt y /sitemap.xml.
+        Devuelve hasta `limite` URLs (las prioriza el puntuador de rutas)."""
+        descubiertas, sitemaps = [], []
+        host = host_base(url_inicial)
+        esquema = urllib.parse.urlparse(url_inicial).scheme
+        origen = f"{esquema}://{urllib.parse.urlparse(url_inicial).netloc}"
+
+        try:
+            r = self.sesion.get(f"{origen}/robots.txt", timeout=self.cfg.timeout,
+                                verify=not self.cfg.inseguro)
+            if r.status_code < 400:
+                sitemaps += re.findall(r"(?im)^\s*Sitemap:\s*(\S+)", r.text)
+        except requests.RequestException:
+            pass
+        if not sitemaps:
+            sitemaps = [f"{origen}/sitemap.xml"]
+
+        def _locs(texto):
+            return re.findall(r"<loc>\s*([^<]+?)\s*</loc>", texto or "")
+
+        for mapa in sitemaps[:3]:
+            try:
+                r = self.sesion.get(mapa, timeout=self.cfg.timeout,
+                                    verify=not self.cfg.inseguro)
+                if r.status_code >= 400:
+                    continue
+                cuerpo = r.text[:700_000]
+                if "<sitemapindex" in cuerpo:  # índice de sitemaps: bajar un nivel
+                    for hijo in _locs(cuerpo)[:5]:
+                        try:
+                            rh = self.sesion.get(hijo, timeout=self.cfg.timeout,
+                                                 verify=not self.cfg.inseguro)
+                            if rh.status_code < 400:
+                                descubiertas += _locs(rh.text[:700_000])
+                        except requests.RequestException:
+                            continue
+                else:
+                    descubiertas += _locs(cuerpo)
+            except requests.RequestException:
+                continue
+            if descubiertas:
+                break
+
+        urls, vistos = [], set()
+        for u in descubiertas:
+            u = u.strip()
+            p = urllib.parse.urlparse(u)
+            if p.scheme not in ("http", "https") or not es_enlace_interno(u, host):
+                continue
+            if re.search(r"\.(png|jpe?g|gif|webp|svg|css|js|pdf|zip|mp4|xml)$",
+                         p.path, re.I):
+                continue
+            if u not in vistos:
+                vistos.add(u)
+                urls.append(u)
+            if len(urls) >= limite:
+                break
+        return urls
+
     def rastrear(self, url_inicial):
         """Devuelve lista de páginas descargadas (dicts)."""
         host = host_base(url_inicial)
         por_visitar = {url_inicial}
+        por_visitar.update(self.obtener_urls_sitemap(url_inicial))
         visitadas = set()
+        finales_visitadas = set()
         paginas = []
 
         while por_visitar and len(paginas) < self.cfg.max_paginas:
             url = sorted(por_visitar, key=puntuar_ruta, reverse=True)[0]
             por_visitar.discard(url)
             url_limpia = url.split("#")[0]
-            if url_limpia in visitadas:
+            # clave canónica: sin fragmento ni barra final (/contacto ≡ /contacto/)
+            clave = url_limpia.rstrip("/") or url_limpia
+            if clave in visitadas:
                 continue
-            visitadas.add(url_limpia)
+            visitadas.add(clave)
 
             if not self.robots_permite(url_limpia):
                 print(f"      [robots.txt] omitida: {url_limpia}")
@@ -289,6 +355,12 @@ class Rastreador:
                 if not paginas:  # guardar aunque sea para reportar el estado
                     paginas.append(resp)
                 continue
+
+            # deduplicar por URL final (p. ej. /contacto y /contacto/ son la misma página)
+            clave_final = resp["url_final"].split("#")[0].rstrip("/")
+            if clave_final in finales_visitadas:
+                continue
+            finales_visitadas.add(clave_final)
 
             paginas.append(resp)
 
@@ -314,6 +386,39 @@ class Rastreador:
 # ----------------------------------------------------------------------
 # Auditoría por sitio
 # ----------------------------------------------------------------------
+
+# namespaces de la REST API de WordPress -> plugin asociado
+WP_PLUGINS_NS = {
+    "contact-form-7": "Contact Form 7 (REST)", "wc": "WooCommerce (REST API)",
+    "yoast": "Yoast SEO (REST)", "elementor": "Elementor (REST)",
+    "rankmath": "Rank Math SEO (REST)", "jetpack": "Jetpack (REST)",
+    "wpml": "WPML (REST)", "polylang": "Polylang (REST)",
+    "tribe": "The Events Calendar (REST)", "givewp": "GiveWP (REST)",
+    "lifterlms": "LifterLMS (REST)", "learndash": "LearnDash (REST)",
+    "flamingo": "Flamingo (REST)", "redirection": "Redirection (REST)",
+}
+
+
+def sondear_wp_json(sesion, origen, cfg):
+    """Sondeo profundo de /wp-json/ en sitios WordPress:
+    nombre del sitio, descripción y namespaces (delatan plugins activos)."""
+    try:
+        r = sesion.get(f"{origen}/wp-json/", timeout=cfg.timeout,
+                       verify=not cfg.inseguro)
+        if r.status_code >= 400 or "json" not in r.headers.get("Content-Type", "").lower():
+            return None
+        datos = r.json()
+    except (requests.RequestException, ValueError):
+        return None
+    return {
+        "nombre_sitio": datos.get("name"),
+        "descripcion": (datos.get("description") or "")[:200],
+        "url": datos.get("url"),
+        "home": datos.get("home"),
+        "timezone": datos.get("timezone_string") or datos.get("gmt_offset"),
+        "namespaces": [str(n) for n in datos.get("namespaces", [])][:60],
+    }
+
 
 def auditar_sitio(url, cfg, empresa=None):
     rastreador = Rastreador(cfg)
@@ -389,6 +494,57 @@ def auditar_sitio(url, cfg, empresa=None):
         "telefonos": extraer_telefonos(texto_cat, sorted(tel_links)),
         "redes_sociales": extraer_redes_sociales(sorted(enlaces)),
     }
+
+    # ---- minería profunda del código fuente ----
+    mineria, contacto_ld, redes_extra = minar_html(
+        [{"url": p["url_final"], "html": p["html"]} for p in paginas_ok],
+        principal["url_final"])
+    resultado["codigo_fuente"] = mineria
+    contactos = resultado["contacto"]
+
+    #   · emails: texto visible ∪ HTML crudo (atributos/JS/JSON) ∪ JSON-LD
+    emails_ld = {e.strip().lower() for e in contacto_ld["emails"]}
+    contactos["emails"] = sorted(
+        set(contactos["emails"]) | emails_ld | set(mineria.get("emails_solo_en_codigo", [])))
+    #   · teléfonos desde datos estructurados (confianza alta)
+    digitos_actuales = {re.sub(r"\D", "", t["numero"]) for t in contactos["telefonos"]}
+    for numero in sorted(contacto_ld["telefonos"]):
+        digitos = re.sub(r"\D", "", numero)
+        if 7 <= len(digitos) <= 15 and digitos not in digitos_actuales:
+            contactos["telefonos"].append(
+                {"numero": numero, "tipo": "JSON-LD (datos estructurados)", "confianza": "alta"})
+    #   · direcciones físicas desde JSON-LD / geo
+    if contacto_ld["direcciones"]:
+        contactos["direcciones"] = sorted(contacto_ld["direcciones"])
+    #   · redes sociales: enlaces ∪ sameAs ∪ twitter:site
+    for enlace in redes_extra:
+        for red, urls in extraer_redes_sociales([enlace]).items():
+            previas = set(contactos["redes_sociales"].get(red, []))
+            contactos["redes_sociales"][red] = sorted(previas | set(urls))
+    contactos["redes_sociales"] = dict(sorted(contactos["redes_sociales"].items()))
+
+    #   · enriquecimiento de tecnologías desde el código fuente
+    tienda = mineria.get("shopify") or {}
+    if tienda.get("dominio_myshopify"):
+        tema = tienda.get("tema") or {}
+        etiqueta = f"Shopify (tema: {tema.get('nombre', '?')} v{tema.get('version', '?')})"
+        resultado["tecnologias"].setdefault("Ecommerce", []).append(etiqueta)
+        resultado["tecnologias"].setdefault("CDN y hosting", []).append(
+            f"Shopify hosting (subdominio {tienda['dominio_myshopify']})")
+
+    techs_planas = {t for lst in resultado["tecnologias"].values() for t in lst}
+    if any(t.startswith("WordPress") for t in techs_planas):
+        purl = urllib.parse.urlparse(principal["url_final"])
+        info_wp = sondear_wp_json(rastreador.sesion, f"{purl.scheme}://{purl.netloc}", cfg)
+        if info_wp:
+            resultado["codigo_fuente"]["wordpress_rest"] = info_wp
+            for ns in info_wp["namespaces"]:
+                plugin = WP_PLUGINS_NS.get(ns.split("/")[0])
+                if plugin:
+                    resultado["tecnologias"].setdefault("CMS", []).append(plugin)
+
+    for cat, techs in resultado["tecnologias"].items():
+        resultado["tecnologias"][cat] = sorted(set(techs))
 
     exposicion = []
     for pag in paginas_ok[: cfg.max_paginas_exposicion]:
@@ -508,6 +664,44 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
                 + "</td></tr>" for cat, techs in tech.items())
             partes.append(f"<h3>Stack tecnológico</h3><table><tbody>{filas}</tbody></table>")
 
+        cf = r.get("codigo_fuente") or {}
+        filas_cf = []
+        metas = cf.get("metadatos") or {}
+        for k in ("description", "keywords", "og:site_name", "generator",
+                  "theme-color", "geo.position", "author", "twitter:site"):
+            if metas.get(k):
+                filas_cf.append((f"meta {k}", _esc(metas[k])))
+        jsonld = cf.get("datos_estructurados_jsonld") or []
+        if jsonld:
+            tipos = {}
+            for o in jsonld:
+                tipos[o["tipo"]] = tipos.get(o["tipo"], 0) + 1
+            filas_cf.append(("Datos estructurados JSON-LD",
+                             _esc(", ".join(f"{t} ×{n}" for t, n in sorted(tipos.items())))))
+        if (cf.get("shopify") or {}).get("dominio_myshopify"):
+            filas_cf.append(("Shopify (código fuente)",
+                             _esc(cf["shopify"]["dominio_myshopify"]
+                                  + (" · " + str(cf["shopify"].get("tema", ""))
+                                     if cf["shopify"].get("tema") else ""))))
+        if cf.get("wordpress_rest"):
+            wp = cf["wordpress_rest"]
+            filas_cf.append(("WordPress REST API",
+                             _esc(f"{wp.get('nombre_sitio') or ''} · tz {wp.get('timezone') or '?'} · "
+                                  f"namespaces: {', '.join(wp.get('namespaces', [])[:8])}")))
+        if cf.get("formularios"):
+            muestra = "; ".join(f"{f['metodo']} {f['accion'][:60]} ({', '.join(f['campos'][:5])})"
+                                for f in cf["formularios"][:3])
+            filas_cf.append((f"Formularios ({len(cf['formularios'])})", _esc(muestra)))
+        if cf.get("feeds"):
+            filas_cf.append(("Feeds RSS/Atom",
+                             "<br>".join(_esc(f["url"]) for f in cf["feeds"])))
+        if cf.get("comentarios_reveladores"):
+            filas_cf.append(("Comentarios en el HTML",
+                             "<br>".join("🧩 " + _esc(c) for c in cf["comentarios_reveladores"])))
+        if filas_cf:
+            partes.append("<h3>🧬 Información del código fuente</h3>"
+                          + _tabla_pares(filas_cf, ["Clave", "Valor"]))
+
         c = r.get("contacto", {})
         filas = []
         if c.get("emails"):
@@ -544,15 +738,29 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
 
 HTML_PRUEBA = """<!doctype html><html><head>
 <meta name="generator" content="WordPress 6.5">
+<meta name="og:site_name" content="Acme Demo Inc">
+<meta name="twitter:site" content="@acmedemo">
 <script src="https://www.googletagmanager.com/gtm.js?id=GTM-ABC123"></script>
 <script src="https://js.stripe.com/v3"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet">
+<link rel="alternate" type="application/rss+xml" href="https://acme-demo.io/feed/">
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "Organization",
+ "name": "Acme Demo Inc", "url": "https://acme-demo.io",
+ "email": "info@acme-demo.io", "telephone": "+52 55 0000 1111",
+ "sameAs": ["https://www.linkedin.com/company/acme-demo", "https://www.tiktok.com/@acmedemo"],
+ "address": {"@type": "PostalAddress", "streetAddress": "Av. Reforma 123",
+             "addressLocality": "CDMX", "postalCode": "06600", "addressCountry": "MX"}}
+</script>
 </head><body>
+<!-- This site is optimized with the Yoast SEO plugin v21.0 - https://yoast.com -->
+<!-- Tema: AcmeTheme v2.1 por Estudio Creativo Demo -->
 <p>Contáctanos: ventas@acme-demo.io o llama al +52 55 1234 5678</p>
 <a href="mailto:soporte@acme-demo.io">soporte</a>
 <a href="tel:+525512345678">llamar</a>
 <a href="https://www.facebook.com/acmedemo">fb</a>
 <a href="https://api.whatsapp.com/send?phone=5215512345678">wa</a>
+<form action="/contacto/enviar" method="post"><input name="nombre" type="text"><input name="email" type="email"></form>
 <p>Transferencias: CLABE interbancaria 002010077777777771 Banco Demo</p>
 <p>IBAN: ES91 2100 0418 4502 0005 1332</p>
 <p>Tarjeta de prueba expuesta 4111 1111 1111 1111</p>
@@ -579,6 +787,13 @@ def auto_test():
         t.decompose()
     expo = detectar_exposicion(sopa.get_text(" ", strip=True), HTML_PRUEBA, "https://prueba.local/")
     seg = analizar_seguridad_http({"content-security-policy": "default-src 'self'"})
+
+    # minería profunda del código fuente
+    mineria, contacto_ld, redes_extra = minar_html(
+        [{"url": "https://prueba.local/", "html": HTML_PRUEBA}], "https://prueba.local/")
+    from detectores import minar_shopify
+    info_shop = minar_shopify('<script>Shopify.shop = "acme-demo.myshopify.com";'
+                              'Shopify.theme = {"name":"Dawn","version":"12.0.0","id":123};</script>')
 
     todas = [t for lst in tech.values() for t in lst]
     tipos_exp = {h["tipo"] for h in expo}
@@ -611,6 +826,18 @@ def auto_test():
              and "ES9121000418450200051332" not in json.dumps(h, ensure_ascii=False)
              for h in expo)),
         ("CSP reportada", "CSP" in seg["presentes"] and "HSTS" in seg["ausentes"]),
+        ("Meta og:site_name minado", mineria["metadatos"].get("og:site_name") == "Acme Demo Inc"),
+        ("twitter:site -> red de X", "https://x.com/acmedemo" in redes_extra),
+        ("JSON-LD: email extraído", "info@acme-demo.io" in contacto_ld["emails"]),
+        ("JSON-LD: teléfono extraído", "+52 55 0000 1111" in contacto_ld["telefonos"]),
+        ("JSON-LD: dirección extraída", any("Reforma" in d for d in contacto_ld["direcciones"])),
+        ("JSON-LD: sameAs (LinkedIn/TikTok)",
+         any("linkedin" in r for r in contacto_ld["redes"]) and any("tiktok" in r for r in contacto_ld["redes"])),
+        ("Comentario Yoast detectado", any("Yoast SEO plugin" in c for c in mineria["comentarios_reveladores"])),
+        ("Formulario detectado", any(f["accion"].endswith("/contacto/enviar") for f in mineria["formularios"])),
+        ("Feed RSS detectado", any(f["url"].endswith("/feed/") for f in mineria["feeds"])),
+        ("Shopify: dominio myshopify minado", info_shop.get("dominio_myshopify") == "acme-demo.myshopify.com"),
+        ("Shopify: tema minado", (info_shop.get("tema") or {}).get("nombre") == "Dawn"),
     ]
 
     fallos = 0

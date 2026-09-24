@@ -415,3 +415,298 @@ def analizar_seguridad_http(cabeceras):
         "puntuacion": f"{len(presentes)}/{total} ({score}%)",
         "https": cab.get("_esquema_https", "desconocido"),
     }
+
+
+# ======================================================================
+# 5. MINERÍA PROFUNDA DEL CÓDIGO FUENTE
+#    Extrae información que NO está en el texto visible:
+#    JSON-LD, metadatos, comentarios HTML, formularios, feeds,
+#    emails en atributos/JS, tema de Shopify, etc.
+# ======================================================================
+
+import html as _html_mod
+import json as _json_mod
+from urllib.parse import urljoin as _urljoin
+
+from bs4 import BeautifulSoup
+
+
+# ---- 5a. JSON-LD (datos estructurados Schema.org) --------------------
+
+_TIPOS_CONTACTO_LD = ("Organization", "LocalBusiness", "Store", "Corporation",
+                      "Person", "ContactPoint", "WebSite", "Brand")
+
+
+def _caminar_objetos(dato):
+    """Generador: recorre dicts/listas/@graph devolviendo cada objeto con @type."""
+    if isinstance(dato, dict):
+        yield dato
+        for clave in ("@graph", "graph", "mainEntity"):
+            if clave in dato:
+                yield from _caminar_objetos(dato[clave])
+        for valor in dato.values():
+            if isinstance(valor, (dict, list)):
+                yield from _caminar_objetos(valor)
+    elif isinstance(dato, list):
+        for item in dato:
+            yield from _caminar_objetos(item)
+
+
+def _como_lista(v):
+    return v if isinstance(v, list) else [v]
+
+
+def _direccion_ld(dir_ld):
+    if isinstance(dir_ld, dict):
+        partes = [dir_ld.get(k) for k in ("streetAddress", "addressLocality",
+                                          "addressRegion", "postalCode")]
+        pais = dir_ld.get("addressCountry")
+        if isinstance(pais, dict):
+            pais = pais.get("name")
+        partes.append(pais)
+        plano = ", ".join(str(p) for p in partes if p)
+        return plano or None
+    if isinstance(dir_ld, str):
+        return dir_ld
+    return None
+
+
+def extraer_json_ld(paginas):
+    """
+    Busca <script type="application/ld+json"> en cada página y recorre los
+    objetos Schema.org extrayendo datos de contacto/organización.
+
+    Devuelve:
+      objetos : resumen de los objetos encontrados (tipo, nombre, url…)
+      contacto: {"emails": set, "telefonos": set, "redes": set, "direcciones": set}
+    """
+    objetos, contacto = [], {"emails": set(), "telefonos": set(),
+                             "redes": set(), "direcciones": set()}
+
+    for pag in paginas:
+        sopa = BeautifulSoup(pag.get("html", ""), "html.parser")
+        for script in sopa.find_all("script", attrs={"type": re.compile(r"ld\+json", re.I)}):
+            crudo = script.string or script.get_text() or ""
+            crudo = crudo.strip()
+            if not crudo:
+                continue
+            try:
+                dato = _json_mod.loads(crudo)
+            except ValueError:
+                # a veces vienen varios objetos pegados o con comillas raras
+                try:
+                    dato = _json_mod.loads(crudo.replace("\x00", "").strip(" ,"))
+                except ValueError:
+                    continue
+
+            for obj in _caminar_objetos(dato):
+                tipo = obj.get("@type")
+                if not tipo or len(objetos) >= 25:
+                    continue
+                tipos = _como_lista(tipo)
+                nombre = obj.get("name") or obj.get("alternateName")
+                url = obj.get("url")
+                resumen = {"tipo": tipos[0] if tipos else tipo}
+                if nombre:
+                    resumen["nombre"] = str(nombre)[:120]
+                if url:
+                    resumen["url"] = str(url)[:200]
+                if obj.get("description"):
+                    resumen["descripcion"] = str(obj["description"])[:160]
+                objetos.append(resumen)
+
+                if any(t in _TIPOS_CONTACTO_LD for t in tipos):
+                    for e in _como_lista(obj.get("email") or []):
+                        if isinstance(e, str) and "@" in e:
+                            contacto["emails"].add(e.strip())
+                    for t in _como_lista(obj.get("telephone") or []):
+                        if isinstance(t, str) and re.sub(r"\D", "", t):
+                            contacto["telefonos"].add(t.strip())
+                    for r in _como_lista(obj.get("sameAs") or []):
+                        if isinstance(r, str) and r.startswith(("http://", "https://")):
+                            contacto["redes"].add(r.split("?")[0].rstrip("/"))
+                    direccion = _direccion_ld(obj.get("address"))
+                    if direccion:
+                        contacto["direcciones"].add(direccion)
+                    geo = obj.get("geo")
+                    if isinstance(geo, dict) and geo.get("latitude"):
+                        contacto["direcciones"].add(
+                            f"geo:{geo.get('latitude')},{geo.get('longitude')}")
+                    cp = obj.get("contactPoint")
+                    for p in _como_lista(cp or []):
+                        if isinstance(p, dict):
+                            if isinstance(p.get("telephone"), str):
+                                contacto["telefonos"].add(p["telephone"].strip())
+                            if isinstance(p.get("email"), str) and "@" in p["email"]:
+                                contacto["emails"].add(p["email"].strip())
+    return objetos, contacto
+
+
+# ---- 5b. Metadatos (description, OG, twitter:site, geo, author) ------
+
+_METAS_INTERES = {
+    "description": "description", "keywords": "keywords", "author": "author",
+    "generator": "generator", "theme-color": "theme-color",
+    "geo.region": "geo.region", "geo.placename": "geo.placename",
+    "geo.position": "geo.position", "ICBM": "ICBM",
+    "og:site_name": "og:site_name", "og:title": "og:title",
+    "og:description": "og:description", "og:locale": "og:locale",
+    "og:type": "og:type", "twitter:site": "twitter:site",
+    "twitter:creator": "twitter:creator", "article:publisher": "article:publisher",
+}
+
+
+def minar_metadatos(sopa):
+    metas, redes_meta = {}, []
+    for meta in sopa.find_all("meta"):
+        clave = (meta.get("name") or meta.get("property") or "").strip().lower()
+        contenido = (meta.get("content") or "").strip()
+        if not clave or not contenido:
+            continue
+        if clave in _METAS_INTERES and clave not in metas:
+            metas[clave] = contenido[:300]
+    for clave in ("twitter:site", "twitter:creator"):
+        usuario = metas.get(clave, "").lstrip("@").strip()
+        if usuario and re.fullmatch(r"[A-Za-z0-9_]{1,30}", usuario):
+            redes_meta.append(f"https://x.com/{usuario}")
+    pub = metas.get("article:publisher", "")
+    if "facebook.com" in pub:
+        redes_meta.append(pub.split("?")[0].rstrip("/"))
+    return metas, redes_meta
+
+
+# ---- 5c. Comentarios HTML reveladores --------------------------------
+
+_KW_COMENTARIO = ("theme", "plantilla", "plugin", "yoast", "rank math", "elementor",
+                  "divi", "avada", "versión", "version", "credit", "powered by",
+                  "generated by", "desarrollado", "diseñado", "diseño web",
+                  "web design", "made by", "built by", "agency", "agencia",
+                  "desarrollador", "developer", "template", "builder")
+
+
+def extraer_comentarios(html, limite=12):
+    hallados, vistos = [], set()
+    for m in re.finditer(r"<!--(.*?)-->", html or "", re.DOTALL):
+        texto = " ".join(m.group(1).split())
+        if not (8 <= len(texto) <= 300):
+            continue
+        bajo = texto.lower()
+        if any(kw in bajo for kw in _KW_COMENTARIO):
+            limpio = _sanear_contexto(texto[:220])
+            if limpio not in vistos:
+                vistos.add(limpio)
+                hallados.append(limpio)
+                if len(hallados) >= limite:
+                    return hallados
+    return hallados
+
+
+# ---- 5d. Formularios, feeds y recursos -------------------------------
+
+def extraer_formularios(sopa, url_pagina, limite=10):
+    formularios = []
+    for form in sopa.find_all("form")[:limite]:
+        accion = (form.get("action") or url_pagina).strip()
+        metodo = (form.get("method") or "GET").upper()
+        campos = []
+        for inp in form.find_all(["input", "textarea", "select"])[:12]:
+            nombre = inp.get("name") or inp.get("id")
+            tipo = inp.get("type", inp.name)
+            if nombre:
+                campos.append(f"{nombre}:{tipo}")
+        if not campos and not accion:
+            continue
+        # los formularios de búsqueda aportan poco
+        if any("search" in c or c == "q:text" for c in campos) and "search" in accion:
+            continue
+        formularios.append({
+            "accion": _urljoin(url_pagina, accion)[:220],
+            "metodo": metodo,
+            "campos": campos[:12],
+        })
+    return formularios
+
+
+def extraer_feeds(sopa, url_pagina):
+    feeds = []
+    for link in sopa.find_all("link", attrs={"type": re.compile(r"(rss|atom)", re.I)}):
+        href = link.get("href")
+        if href:
+            feeds.append({"tipo": link.get("type", ""), "url": _urljoin(url_pagina, href)})
+    return feeds[:6]
+
+
+# ---- 5e. Shopify: tema y dominio myshopify ----------------------------
+
+def minar_shopify(html):
+    info = {}
+    m = re.search(r"Shopify\.shop\s*=\s*[\"']([^\"']+)[\"']", html or "")
+    if m:
+        info["dominio_myshopify"] = m.group(1)
+        m2 = re.search(r"Shopify\.theme\s*=\s*\{(.*?)\}", html or "", re.DOTALL)
+        if m2:
+            tema = {}
+            for campo, patron in (("nombre", r"[\"']name[\"']\s*:\s*[\"']([^\"']+)"),
+                                  ("version", r"[\"']version[\"']\s*:\s*[\"']([^\"']+)"),
+                                  ("id", r"[\"']id[\"']\s*:\s*(\d+)"),
+                                  ("theme_store_id", r"[\"']theme_store_id[\"']\s*:\s*(\d+)")):
+                mm = re.search(patron, m2.group(1))
+                if mm:
+                    tema[campo] = mm.group(1)
+            if tema:
+                info["tema"] = tema
+    return info
+
+
+# ---- 5f. Función principal de minería --------------------------------
+
+def minar_html(paginas, url_base):
+    """
+    Minería profunda del código fuente de todas las páginas descargadas.
+    paginas: lista de dicts {"url": ..., "html": ...}
+    Devuelve (mineria, contacto_ld, redes_extra):
+      mineria     : dict listo para incluir en el JSON de salida
+      contacto_ld : emails/teléfonos/redes/direcciones de datos estructurados
+      redes_extra : redes desde metadatos (twitter:site, etc.)
+    """
+    html_cat = "\n".join(p.get("html", "")[:400_000] for p in paginas)
+
+    objetos_ld, contacto_ld = extraer_json_ld(paginas)
+
+    metas, formularios, feeds, redes_meta = {}, [], [], []
+    for pag in paginas:
+        sopa = BeautifulSoup(pag.get("html", ""), "html.parser")
+        m_pag, r_pag = minar_metadatos(sopa)
+        for k, v in m_pag.items():
+            metas.setdefault(k, v)
+        redes_meta.extend(r_pag)
+        formularios.extend(extraer_formularios(sopa, pag.get("url") or url_base))
+        feeds.extend(extraer_feeds(sopa, pag.get("url") or url_base))
+
+    # emails en el HTML crudo (atributos data-*, JS en línea, JSON embebido)
+    emails_html = set(extraer_emails(html_cat, []))
+
+    # comentarios reveladores (cap por página global)
+    comentarios = extraer_comentarios(html_cat)
+
+    info_shopify = minar_shopify(html_cat)
+
+    # deduplicar y acotar
+    visto_f, formularios_unicos = set(), []
+    for f in formularios:
+        clave = (f["accion"], tuple(f["campos"][:3]))
+        if clave not in visto_f:
+            visto_f.add(clave)
+            formularios_unicos.append(f)
+
+    mineria = {
+        "metadatos": metas,
+        "datos_estructurados_jsonld": objetos_ld[:20],
+        "formularios": formularios_unicos[:10],
+        "feeds": feeds[:6],
+        "comentarios_reveladores": comentarios,
+        "emails_solo_en_codigo": sorted(emails_html),
+        "shopify": info_shopify,
+    }
+    redes_extra = sorted(set(redes_meta) | contacto_ld["redes"])
+    return mineria, contacto_ld, redes_extra
