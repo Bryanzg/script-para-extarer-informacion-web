@@ -6,3 +6,6 @@ output/
 __pycache__/
 *.pyc
 .venv/
+
+# variantes usadas en pruebas reales
+salida_california/
