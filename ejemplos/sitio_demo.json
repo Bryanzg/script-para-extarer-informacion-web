@@ -1,28 +1,22 @@
 {
-  "url_solicitada": "http://localhost:8931",
-  "empresa": "Acme Demo (sitio ficticio de prueba)",
-  "fecha_auditoria": "2026-09-24T17:19:21",
+  "url_solicitada": "http://localhost:8934",
+  "empresa": "Acme Pets (sitio ficticio de prueba)",
+  "fecha_auditoria": "2026-09-24T18:01:54",
   "paginas_analizadas": [
-    "http://localhost:8931/contacto/",
-    "http://localhost:8931/aviso-legal/",
-    "http://localhost:8931/",
-    "http://localhost:8931/pagina-solo-sitemap/"
+    "http://localhost:8934/",
+    "http://localhost:8934/contacto/"
   ],
   "paginas_con_error": [],
   "duracion_segundos": 0.0,
   "estado": "ok",
-  "url_final": "http://localhost:8931/contacto/",
+  "url_final": "http://localhost:8934/",
   "codigo_http": 200,
   "tecnologias": {
     "CMS": [
-      "Contact Form 7 (REST)",
-      "Elementor (REST)",
       "Elementor (page builder)",
       "WooCommerce (REST API)",
       "WooCommerce (plugin)",
-      "WordPress",
-      "Yoast SEO (REST)",
-      "Yoast SEO (plugin)"
+      "WordPress"
     ],
     "Ecommerce": [
       "WooCommerce"
@@ -30,38 +24,17 @@
     "Analytics": [
       "Google Tag Manager"
     ],
-    "Advertising": [
-      "Meta Pixel (Facebook)"
-    ],
-    "Payments": [
-      "Stripe"
-    ],
     "Frameworks": [
       "Bootstrap"
-    ],
-    "CDN y hosting": [
-      "Cloudflare"
-    ],
-    "Server": [
-      "PHP"
     ]
   },
   "contacto": {
     "emails": [
-      "contacto@acme-demo.mx",
-      "director@acme-demo.mx",
-      "facturacion@acme-demo.mx",
-      "info@acme-demo.mx",
-      "oculto@acme-demo.mx",
-      "soporte@acme-demo.mx",
-      "ventas@acme-demo.mx"
+      "contacto@acmepets.mx",
+      "info@acmepets.mx",
+      "ventas@acmepets.mx"
     ],
     "telefonos": [
-      {
-        "numero": "+5215511223344",
-        "tipo": "enlace tel:",
-        "confianza": "alta"
-      },
       {
         "numero": "+52 55 8000 1234",
         "tipo": "formato internacional",
@@ -71,143 +44,104 @@
         "numero": "+52 55 9000 7788",
         "tipo": "JSON-LD (datos estructurados)",
         "confianza": "alta"
-      },
-      {
-        "numero": "+52 833 210 4455",
-        "tipo": "JSON-LD (datos estructurados)",
-        "confianza": "alta"
       }
     ],
     "redes_sociales": {
       "Instagram": [
-        "https://www.instagram.com/acme.demo"
-      ],
-      "LinkedIn": [
-        "https://mx.linkedin.com/company/acme-demo",
-        "https://www.linkedin.com/company/acme-demo"
-      ],
-      "TikTok": [
-        "https://www.tiktok.com/@acme.demo"
-      ],
-      "X / Twitter": [
-        "https://x.com/acme_demo_corp"
+        "https://www.instagram.com/acme.pets"
       ]
     },
     "direcciones": [
-      "Blvd. Adolfo López Mateos 2025, Tampico, TAM, 89040, MX"
+      "Blvd. López Mateos 2025, Tampico, 89040, MX"
     ]
   },
   "codigo_fuente": {
     "metadatos": {
       "generator": "WordPress 6.5.4",
-      "description": "Acme Demo — venta de widgets de prueba, CDMX",
-      "og:site_name": "Acme Demo Corporativo",
-      "twitter:site": "@acme_demo_corp",
-      "geo.position": "19.4326;-99.1332",
-      "theme-color": "#0d6efd"
+      "description": "Tienda de mascotas: croquetas premium, arena para gato, juguetes y accesorios para perros. Envío a todo México.",
+      "keywords": "mascotas, pet shop, croquetas, perros, gatos, veterinaria"
     },
     "datos_estructurados_jsonld": [
       {
-        "tipo": "Organization",
-        "nombre": "Acme Demo, S.A. de C.V.",
+        "tipo": "PetStore",
+        "nombre": "Acme Pets",
         "url": "http://localhost:8931/"
       },
       {
         "tipo": "PostalAddress"
-      },
-      {
-        "tipo": "ContactPoint"
       }
     ],
-    "formularios": [
-      {
-        "accion": "http://localhost:8931/contacto/enviar",
-        "metodo": "POST",
-        "campos": [
-          "nombre:text",
-          "correo:email",
-          "mensaje:textarea"
-        ]
-      }
-    ],
-    "feeds": [
-      {
-        "tipo": "application/rss+xml",
-        "url": "http://localhost:8931/feed.xml"
-      }
-    ],
-    "comentarios_reveladores": [
-      "This site is optimized with the Yoast SEO plugin v22.1",
-      "Tema hijo: AcmeTheme v2.3.1 desarrollado por Estudio Pixel MX"
-    ],
+    "formularios": [],
+    "feeds": [],
+    "comentarios_reveladores": [],
     "emails_solo_en_codigo": [
-      "contacto@acme-demo.mx",
-      "director@acme-demo.mx",
-      "facturacion@acme-demo.mx",
-      "info@acme-demo.mx",
-      "oculto@acme-demo.mx",
-      "soporte@acme-demo.mx",
-      "ventas@acme-demo.mx"
+      "contacto@acmepets.mx",
+      "info@acmepets.mx",
+      "ventas@acmepets.mx"
     ],
     "shopify": {},
     "wordpress_rest": {
-      "nombre_sitio": "Acme Demo, S.A. de C.V.",
-      "descripcion": "Widgets de prueba desde 2015",
+      "nombre_sitio": "Acme Pets",
+      "descripcion": "Petshop",
       "url": "http://localhost:8931",
-      "home": "http://localhost:8931",
+      "home": null,
       "timezone": "America/Mexico_City",
       "namespaces": [
         "wp/v2",
         "oembed/1.0",
-        "contact-form-7/v1",
-        "wc/v3",
-        "yoast/v1",
-        "elementor/v1"
+        "wc/v3"
       ]
     }
+  },
+  "categoria_negocio": {
+    "categoria": "Mascotas",
+    "secundaria": null,
+    "confianza": "alta",
+    "tienda_online": true,
+    "puntuaciones": [
+      {
+        "categoria": "Mascotas",
+        "puntos": 46
+      },
+      {
+        "categoria": "Electrónica y gadgets",
+        "puntos": 2
+      }
+    ],
+    "evidencia": [
+      "JSON-LD @type: PetStore",
+      "kw fuerte: mascota",
+      "kw fuerte: perros",
+      "kw fuerte: gatos",
+      "kw fuerte: croquetas",
+      "kw apoyo: arena para gato"
+    ]
   },
   "exposicion_datos": [
     {
       "tipo": "CLABE interbancaria expuesta (18 dígitos)",
       "valor_enmascarado": "0121************65",
       "severidad": "alta",
-      "pagina": "http://localhost:8931/contacto/",
+      "pagina": "http://localhost:8934/contacto/",
       "nota": "",
-      "contexto": "ntacto Ventas: ventas@acme-demo.mx WhatsApp: +5215*******44BBVA CLABE interbancaria: 0121************65 (solo transferencia SPEI)"
-    },
-    {
-      "tipo": "Número de tarjeta con formato válido (Luhn)",
-      "valor_enmascarado": "4242**********42",
-      "severidad": "crítica",
-      "pagina": "http://localhost:8931/aviso-legal/",
-      "nota": "",
-      "contexto": "Aviso legal Facturación: facturacion@acme-demo.mx Test card visible por error del dev: 4242**********42"
+      "contexto": "s@acmepets.mx · Adiestramiento canino y estética para mascotas. BBVA CLABE interbancaria: 0121************65 (transferencia SPEI)"
     }
   ],
   "seguridad_http": {
-    "presentes": {
-      "HSTS": {
-        "valor": "max-age=31536000",
-        "descripcion": "Fuerza HTTPS en el navegador"
-      },
-      "X-Content-Type-Options": {
-        "valor": "nosniff",
-        "descripcion": "Evita MIME-sniffing"
-      }
-    },
+    "presentes": {},
     "ausentes": [
+      "HSTS",
       "CSP",
       "X-Frame-Options",
+      "X-Content-Type-Options",
       "Referrer-Policy",
       "Permissions-Policy",
       "X-XSS-Protection"
     ],
-    "puntuacion": "2/7 (29%)",
+    "puntuacion": "0/7 (0%)",
     "https": "no"
   },
   "cabeceras_servidor": {
-    "server": "SimpleHTTP/0.6 Python/3.11.2",
-    "x-powered-by": "PHP/8.2.12",
-    "cf-ray": "8f1a2b3c4d5e-MEX"
+    "server": "SimpleHTTP/0.6 Python/3.11.2"
   }
 }

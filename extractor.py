@@ -41,12 +41,13 @@ import urllib.robotparser
 import requests
 from bs4 import BeautifulSoup
 
-from detectores import (analizar_seguridad_http, detectar_exposicion,
-                        detectar_tecnologias, extraer_emails,
+from detectores import (analizar_seguridad_http, clasificar_negocio,
+                        detectar_exposicion, detectar_tecnologias,
+                        etiqueta_categoria, extraer_emails,
                         extraer_redes_sociales, extraer_telefonos,
                         minar_html)
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 UA_DEFECTO = "WebAuditBot/1.0 (+auditoria-autorizada; contacto: configurar-con --user-agent)"
 
 # Rutas internas prioritarias: ahí suelen estar contacto, datos legales y pagos
@@ -546,6 +547,14 @@ def auditar_sitio(url, cfg, empresa=None):
     for cat, techs in resultado["tecnologias"].items():
         resultado["tecnologias"][cat] = sorted(set(techs))
 
+    # ---- clasificador de categoría de negocio ----
+    es_tienda = bool(resultado["tecnologias"].get("Ecommerce")) or any(
+        "WooCommerce" in t or "Shopify" in t
+        for t in resultado["tecnologias"].get("CMS", []))
+    resultado["categoria_negocio"] = clasificar_negocio(
+        texto_cat, mineria.get("metadatos"),
+        mineria.get("datos_estructurados_jsonld"), es_tienda)
+
     exposicion = []
     for pag in paginas_ok[: cfg.max_paginas_exposicion]:
         sopa = BeautifulSoup(pag["html"], "html.parser")
@@ -582,7 +591,7 @@ def guardar_json(datos, ruta):
 
 def guardar_csv(resultados, ruta):
     from firmas_tecnologia import CATEGORIAS
-    columnas = (["empresa", "sitio", "estado", "emails", "telefonos", "redes_sociales"]
+    columnas = (["empresa", "sitio", "categoria_negocio", "estado", "emails", "telefonos", "redes_sociales"]
                 + CATEGORIAS
                 + ["hallazgos_exposicion", "severidad_maxima", "seguridad_http"])
     sev_orden = {"crítica": 4, "alta": 3, "media": 2, "baja": 1}
@@ -598,6 +607,7 @@ def guardar_csv(resultados, ruta):
             fila = {
                 "empresa": r.get("empresa") or "",
                 "sitio": r.get("url_final", r["url_solicitada"]),
+                "categoria_negocio": etiqueta_categoria(r.get("categoria_negocio")),
                 "estado": r["estado"],
                 "emails": "; ".join(r["contacto"]["emails"]),
                 "telefonos": "; ".join(t["numero"] for t in r["contacto"]["telefonos"]),
@@ -620,6 +630,7 @@ th,td{border:1px solid #ddd;padding:.45rem .6rem;text-align:left;vertical-align:
 th{background:#6c63ff;color:#fff}
 tr:nth-child(even){background:#f0efff}
 .etiqueta{display:inline-block;background:#e8e6ff;border-radius:4px;padding:.1rem .45rem;margin:.1rem;font-size:.85rem}
+.etiqueta.cat{background:#d7f5dd;color:#0c5719;font-weight:600;font-size:.95rem}
 .sev-critica{background:#ffd6d6;color:#8a0000}.sev-alta{background:#ffe9c7;color:#7a4b00}
 .sev-media{background:#fff9c2;color:#6b6200}.sev-baja{background:#d9ecff;color:#064a80}
 .aviso{background:#fff3cd;border:1px solid #ffecb5;border-radius:8px;padding:.8rem 1rem;margin:1rem 0}
@@ -655,6 +666,13 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
         partes.append(f"<p><b>Estado:</b> {estado} · <b>Páginas analizadas:</b> "
                       f"{len(r.get('paginas_analizadas', []))} · "
                       f"<b>Seguridad HTTP:</b> {_esc(r.get('seguridad_http', {}).get('puntuacion', '-'))}</p>")
+        if r.get("categoria_negocio"):
+            catn = r["categoria_negocio"]
+            ev = (" · evidencia: " + _esc(", ".join(catn.get("evidencia", [])[:4]))
+                  if catn.get("evidencia") else "")
+            partes.append(f"<p>🏷️ <b>Categoría detectada:</b> "
+                          f"<span class='etiqueta cat'>{_esc(etiqueta_categoria(catn))}</span>"
+                          f"<small>{ev}</small></p>")
 
         tech = r.get("tecnologias", {})
         if tech:
@@ -798,9 +816,18 @@ def auto_test():
     # minería profunda del código fuente
     mineria, contacto_ld, redes_extra = minar_html(
         [{"url": "https://prueba.local/", "html": HTML_PRUEBA}], "https://prueba.local/")
-    from detectores import minar_shopify
+    from detectores import minar_shopify, clasificar_negocio
     info_shop = minar_shopify('<script>Shopify.shop = "acme-demo.myshopify.com";'
                               'Shopify.theme = {"name":"Dawn","version":"12.0.0","id":123};</script>')
+
+    # clasificador de vertical de negocio
+    texto_cannabis = ("Gomitas THC Delta 9 y CBD 100% legales en México. Vapes, wax, HHC, "
+                      "pre-rolls, bongs y smoke shop. Terpenos y cáñamo premium.")
+    cat_cnnb = clasificar_negocio(texto_cannabis, {"description": "Compra gomitas THC y CBD"},
+                                  [], es_tienda=True)
+    cat_pets = clasificar_negocio("venta de croquetas",
+                                  {}, [{"tipo": "PetStore"}], es_tienda=True)
+    cat_vacia = clasificar_negocio("xyz qqq www", {}, [], es_tienda=False)
 
     todas = [t for lst in tech.values() for t in lst]
     tipos_exp = {h["tipo"] for h in expo}
@@ -845,6 +872,12 @@ def auto_test():
         ("Feed RSS detectado", any(f["url"].endswith("/feed/") for f in mineria["feeds"])),
         ("Shopify: dominio myshopify minado", info_shop.get("dominio_myshopify") == "acme-demo.myshopify.com"),
         ("Shopify: tema minado", (info_shop.get("tema") or {}).get("nombre") == "Dawn"),
+        ("Clasificador: cannabis/CBD detectado (alta)",
+         cat_cnnb["categoria"] == "Cannabis / CBD y smoke shop" and cat_cnnb["confianza"] == "alta"),
+        ("Clasificador: marca tienda online", cat_cnnb["tienda_online"] is True),
+        ("Clasificador: PetStore JSON-LD -> Mascotas",
+         cat_pets["categoria"] == "Mascotas" and cat_pets["confianza"] == "alta"),
+        ("Clasificador: sin señal -> no identificada", cat_vacia["categoria"] is None),
     ]
 
     fallos = 0

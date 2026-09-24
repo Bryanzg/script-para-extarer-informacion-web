@@ -515,7 +515,10 @@ def extraer_json_ld(paginas):
                     resumen["descripcion"] = str(obj["description"])[:160]
                 objetos.append(resumen)
 
-                if any(t in _TIPOS_CONTACTO_LD for t in tipos):
+                # si el objeto trae datos de contacto, se extraen SIN importar
+                # el @type (cubre subtipos: PetStore, Restaurant, Dentist…)
+                if any(k in obj for k in ("email", "telephone", "sameAs",
+                                          "address", "contactPoint", "geo")):
                     for e in _como_lista(obj.get("email") or []):
                         if isinstance(e, str) and "@" in e:
                             contacto["emails"].add(e.strip())
@@ -710,3 +713,256 @@ def minar_html(paginas, url_base):
     }
     redes_extra = sorted(set(redes_meta) | contacto_ld["redes"])
     return mineria, contacto_ld, redes_extra
+
+
+# ======================================================================
+# 6. CLASIFICADOR DE CATEGORÍA DE NEGOCIO
+#    Detecta el vertical/industria del sitio a partir de:
+#      · @type de JSON-LD (Schema.org tipifica muchos negocios)   -> +12
+#      · keywords fuertes en title/description/keywords (meta)    -> 2× peso
+#      · keywords fuertes (4 pts) y de apoyo (2 pts) en el texto
+# ======================================================================
+
+# Palabras FUERTES (muy distintivas del vertical) y de APOYO (refuerzan)
+CATEGORIAS_NEGOCIO = {
+    "Cannabis / CBD y smoke shop": {
+        "fuertes": [r"cannabis", r"\bcbd\b", r"\bthc\b", r"\bhhc\b", r"\bthcp\b",
+                    r"delta[- ]?[89]", r"wax", r"marihuana", r"cáñamo", r"\bhemp\b",
+                    r"bong", r"smoke ?shop", r"dispensario", r"pre[- ]?roll",
+                    r"blunt\b", r"terpenos", r"vape\b", r"cogollo"],
+        "apoyo":  [r"gotas de", r"microdosis", r"adaptógenos"]},
+    "Mascotas": {
+        "fuertes": [r"mascotas?", r"\bpet ?shop\b", r"perros?\b", r"gatos?\b",
+                    r"croquetas", r"veterinaria?", r"alimento para (perros?|gatos?)"],
+        "apoyo":  [r"collar\b", r"arena para gato", r"peluche", r"raza\b"]},
+    "Farmacia y salud": {
+        "fuertes": [r"farmacia", r"medicamentos?", r"laboratorio (clínico|dental)",
+                    r"oftalmolog", r"odontolog", r"consultorio (médico|dental)",
+                    r"óptica\b", r"nutriólog"],
+        "apoyo":  [r"suplementos?", r"vitaminas?", r"pacientes?", r"\bdr\.\b",
+                    r"salud\b", r"clínica\b", r"bienestar"]},
+    "Alimentos y restaurantes": {
+        "fuertes": [r"restaurante?s?\b", r"taquer[ií]a", r"pizzer[ií]a", r"\bsushi\b",
+                    r"cafeter[ií]a", r"menu del día", r"\bchef\b", r"reposter[ií]a",
+                    r"panader[ií]a", r"mariscos", r"tortiller[ií]a", r"fast ?food",
+                    r"cocina (mexicana|italiana|japonesa)"],
+        "apoyo":  [r"\bmen[uú]\b", r"platillos?", r"sabor(?:es)?\b", r"rebanada"]},
+    "Moda y calzado": {
+        "fuertes": [r"\bropa\b", r"fashion", r"vestidos?\b", r"hoodie", r"sudadera",
+                    r"calzado", r"zapatos?\b", r"tenis\b", r"boutique", r"playera",
+                    r"sneakers?", r"streetwear", r"leggings"],
+        "apoyo":  [r"tallas?\b", r"colecci[oó]n (nueva|de)", r"outfit"]},
+    "Electrónica y gadgets": {
+        "fuertes": [r"celulares?", r"\blaptops?\b", r"\biphone\b", r"aud[ií]fonos",
+                    r"gadgets?", r"computadoras?", r"electr[oó]nica de consumo",
+                    r"\btablets?\b", r"smartwatch"],
+        "apoyo":  [r"garant[ií]a de 12", r"accesorios para", r"bocina"]},
+    "Belleza y cosmética": {
+        "fuertes": [r"cosm[eé]ticos?", r"maquillaje", r"skincare", r"labial",
+                    r"\bs[eé]rum\b", r"crema facial", r"\bnail\b", r"pesta[ñn]as",
+                    r"sal[oó]n de belleza", r"barber[ií]a"],
+        "apoyo":  [r"shampoo", r"\bpiel\b", r"brillo", r"esmalte"]},
+    "Hogar y muebles": {
+        "fuertes": [r"muebles?", r"colch[oó]n", r"sof[aá]", r"decoraci[oó]n del hogar",
+                    r"home ?decor", r"cojines?", r"l[aá]mparas? de", r"cocina integral",
+                    r"comedor de \d|comedores"],
+        "apoyo":  [r"interiorismo", r"ambientaci[oó]n"]},
+    "Deportes y fitness": {
+        "fuertes": [r"gimnasio", r"\bgym\b", r"fitness", r"crossfit",
+                    r"prote[ií]na (whey|deportiva)", r"creatina", r"deportes?\b",
+                    r"ciclismo|bicicletas? de", r"suplementos deportivos"],
+        "apoyo":  [r"pesas\b", r"cardio", r"yoga\b", r"running"]},
+    "Automotriz": {
+        "fuertes": [r"refacciones? (para|de) auto", r"autopartes", r"llantas?\b",
+                    r"taller mec[aá]nico", r"automotriz", r"motocicletas?",
+                    r"aceite de motor", r"frenos para auto"],
+        "apoyo":  [r"agencia de autos", r"seminuevos?", r"kilometraje"]},
+    "Inmobiliaria y bienes raíces": {
+        "fuertes": [r"inmobiliaria", r"bienes ra[ií]ces", r"real ?estate",
+                    r"casas en venta", r"departamentos en venta", r"terrenos en venta",
+                    r"inmuebles?\b"],
+        "apoyo":  [r"hect[aá]reas?", r"m2\b|\bm²\b", r"amenidades", r"preventa"]},
+    "Legal y contable": {
+        "fuertes": [r"abogados?\b", r"despacho (jur[ií]dico|legal)", r"bufete",
+                    r"notar[ií]a", r"litigio", r"derecho (mercantil|familiar|penal)"],
+        "apoyo":  [r"contadores?", r"contadur[ií]a", r"\bfiscal\b", r"testamento"]},
+    "Finanzas y seguros": {
+        "fuertes": [r"seguros? de (auto|vida|hogar|gastos m[eé]dicos)", r"aseguradora",
+                    r"fintech", r"cr[eé]dito (hipotecario|personal|automotriz)",
+                    r"pr[eé]stamos?", r"inversiones? en", r"fondos de inversi[oó]n"],
+        "apoyo":  [r"tasa de inter[eé]s", r"cat\b", r"aportaciones"]},
+    "Educación y cursos": {
+        "fuertes": [r"\bcurso(s)?\b", r"diplomados?", r"certificaci[oó]n",
+                    r"\bacademia\b", r"colegio\b", r"universidad\b", r"e-?learning",
+                    r"capacitaci[oó]n", r"escuela de"],
+        "apoyo":  [r"inscripciones?", r"becas?\b", r"docentes?"]},
+    "Viajes, hotel y turismo": {
+        "fuertes": [r"\bhotel\b", r"\bhostal\b", r"resort\b", r"hospedaje",
+                    r"agencia de viajes", r"paquetes? tur[ií]sticos?", r"\btours?\b",
+                    r"vuelos? a"],
+        "apoyo":  [r"habitaci[oó]n", r"check-?in", r"todo incluido"]},
+    "SaaS y software": {
+        "fuertes": [r"\bsaas\b", r"software (de|para)", r"plataforma (de|digital)",
+                    r"\bapi(s)?\b", r"\bdashboard\b", r"\berp\b", r"\bcrm\b",
+                    r"app (m[oó]vil|para)"],
+        "apoyo":  [r"automatiza", r"integraciones", r"suscripci[oó]n", r"m[oó]dulos"]},
+    "Agencia y servicios profesionales": {
+        "fuertes": [r"agencia (digital|de marketing|de publicidad|creativa)",
+                    r"\bbranding\b", r"marketing digital", r"dise[ñn]o web",
+                    r"consultor[ií]a", r"agencia de seo"],
+        "apoyo":  [r"portafolio", r"campa[ñn]as", r"casos de [eé]xito"]},
+    "Industrial y ferretería": {
+        "fuertes": [r"ferreter[ií]a", r"torniller[ií]a", r"\bacero\b", r"maquinaria",
+                    r"herramientas? (el[eé]ctricas?|industriales?)",
+                    r"materiales para construcci[oó]n"],
+        "apoyo":  [r"soldadura", r"mayoreo", r"cat[aá]logo industrial"]},
+    "Construcción y arquitectura": {
+        "fuertes": [r"constructora", r"construcci[oó]n de (casas|naves|obras)",
+                    r"arquitectos?\b", r"remodelaci[oó]n", r"obra civil"],
+        "apoyo":  [r"plano arquitect[oó]nico", r"presupuesto de obra"]},
+    "Joyería y relojes": {
+        "fuertes": [r"joyer[ií]a", r"anillos? de", r"\bpulseras?\b", r"\bplata \.",
+                    r"oro (de )?(14|18|24)k|oro\b", r"diamante", r"relojes? de"],
+        "apoyo":  [r"grabado", r"compromiso"]},
+    "Infantil y juguetes": {
+        "fuertes": [r"juguetes?", r"jugueter[ií]a", r"guarder[ií]a", r"pa[ñn]ales",
+                    r"ropa de beb[eé]", r"art[ií]culos? para beb[eé]s?\b"],
+        "apoyo":  [r"did[aá]ctico"]},
+    "Supermercado y abarrotes": {
+        "fuertes": [r"supermercado", r"abarrotes", r"despensa", r"frutas y verduras",
+                    r"mercado (de|local)", r"tienda de conveniencia"],
+        "apoyo":  [r"delivery a domicilio", r"ofertas de la semana"]},
+}
+
+# Tipos Schema.org -> categoría (fuerte: +12)
+TIPO_LD_A_CATEGORIA = {
+    # mascotas
+    "petstore": "Mascotas", "veterinarycare": "Mascotas",
+    # salud
+    "medicalbusiness": "Farmacia y salud", "physician": "Farmacia y salud",
+    "dentist": "Farmacia y salud", "pharmacy": "Farmacia y salud",
+    "optician": "Farmacia y salud", "hospital": "Farmacia y salud",
+    "medicalclinic": "Farmacia y salud", "communityhealth": "Farmacia y salud",
+    # alimentos
+    "restaurant": "Alimentos y restaurantes", "cafeorcoffeeshop": "Alimentos y restaurantes",
+    "fastfoodrestaurant": "Alimentos y restaurantes", "bakery": "Alimentos y restaurantes",
+    "barorpub": "Alimentos y restaurantes", "foodestablishment": "Alimentos y restaurantes",
+    "grocerystore": "Supermercado y abarrotes", "liquorstore": "Supermercado y abarrotes",
+    # retail vertical
+    "clothingstore": "Moda y calzado", "shoestore": "Moda y calzado",
+    "electronicsstore": "Electrónica y gadgets", "computerstore": "Electrónica y gadgets",
+    "furniturestore": "Hogar y muebles", "homegoodsstore": "Hogar y muebles",
+    "hardwarestore": "Industrial y ferretería", "jewelrystore": "Joyería y relojes",
+    "sportinggoodsstore": "Deportes y fitness", "toystore": "Infantil y juguetes",
+    "autopartsstore": "Automotriz", "tireshop": "Automotriz",
+    "florist": "Supermercado y abarrotes", "bookstore": "Educación y cursos",
+    "conveniencestore": "Supermercado y abarrotes",
+    # servicios
+    "realestateagent": "Inmobiliaria y bienes raíces", "apartmentcomplex": "Inmobiliaria y bienes raíces",
+    "legalservice": "Legal y contable", "attorney": "Legal y contable", "notary": "Legal y contable",
+    "accountingservice": "Legal y contable",
+    "bankorcreditunion": "Finanzas y seguros", "financialservice": "Finanzas y seguros",
+    "insuranceagency": "Finanzas y seguros",
+    "hotel": "Viajes, hotel y turismo", "lodgingbusiness": "Viajes, hotel y turismo",
+    "hostel": "Viajes, hotel y turismo", "resort": "Viajes, hotel y turismo",
+    "travelagency": "Viajes, hotel y turismo",
+    "school": "Educación y cursos", "collegeoruniversity": "Educación y cursos",
+    "preschool": "Educación y cursos", "educationalorganization": "Educación y cursos",
+    "exercisegym": "Deportes y fitness", "gym": "Deportes y fitness",
+    "sportsclub": "Deportes y fitness",
+    "beautysalon": "Belleza y cosmética", "hairsalon": "Belleza y cosmética",
+    "dayspa": "Belleza y cosmética", "nailsalon": "Belleza y cosmética",
+    "barbershop": "Belleza y cosmética", "healthandbeautybusiness": "Belleza y cosmética",
+    "tattooparlor": "Belleza y cosmética",
+    "autodealer": "Automotriz", "autorepair": "Automotriz",
+    "plumber": "Construcción y arquitectura", "electrician": "Construcción y arquitectura",
+    "generalcontractor": "Construcción y arquitectura", "roofingcontractor": "Construcción y arquitectura",
+    "hvacbusiness": "Construcción y arquitectura", "housepainter": "Construcción y arquitectura",
+    "locksmith": "Industrial y ferretería", "movingcompany": "Industrial y ferretería",
+    "professionalservice": "Agencia y servicios profesionales",
+    "softwareapplication": "SaaS y software",
+}
+
+
+def clasificar_negocio(texto, metadatos=None, objetos_ld=None, es_tienda=False):
+    """
+    Clasifica el vertical de negocio del sitio.
+
+    Parámetros:
+      texto        : texto visible concatenado (se recorta para rendimiento).
+      metadatos    : dict de metadatos minados (description, keywords, author…).
+      objetos_ld   : lista de objetos JSON-LD resumidos (con clave "tipo").
+      es_tienda    : True si el stack incluye plataforma ecommerce.
+
+    Devuelve dict:
+      {"categoria": ..., "secundaria": ..., "confianza": "alta|media|baja",
+       "tienda_online": bool, "puntuaciones": [...top 5], "evidencia": [...]}
+    """
+    texto = (texto or "")[:500_000].lower()
+    metadatos = metadatos or {}
+    meta_txt = " ".join(str(metadatos.get(k, "")) for k in
+                        ("description", "keywords", "author", "og:title",
+                         "og:site_name", "og:description")).lower()
+
+    puntuaciones, evidencia = {}, {}
+
+    # 1) JSON-LD @type (la señal más fuerte)
+    for obj in objetos_ld or []:
+        for campo in ("tipo",):
+            tipo = str(obj.get(campo, ""))
+            for clave, cat in TIPO_LD_A_CATEGORIA.items():
+                if clave in tipo.replace(" ", "").replace("-", "").lower():
+                    puntuaciones[cat] = puntuaciones.get(cat, 0) + 12
+                    evidencia.setdefault(cat, []).append(f"JSON-LD @type: {tipo}")
+
+    # 2) keywords
+    for categoria, listas in CATEGORIAS_NEGOCIO.items():
+        for patron in listas["fuertes"]:
+            m = re.search(patron, texto, re.IGNORECASE)
+            if m:
+                puntos = 4 + (4 if re.search(patron, meta_txt, re.IGNORECASE) else 0)
+                puntuaciones[categoria] = puntuaciones.get(categoria, 0) + puntos
+                evidencia.setdefault(categoria, []).append(f"kw fuerte: {m.group(0)[:40]}")
+        for patron in listas["apoyo"]:
+            m = re.search(patron, texto, re.IGNORECASE)
+            if m:
+                puntuaciones[categoria] = puntuaciones.get(categoria, 0) + 2
+                evidencia.setdefault(categoria, []).append(f"kw apoyo: {m.group(0)[:40]}")
+
+    if not puntuaciones:
+        return {"categoria": None, "secundaria": None, "confianza": "nula",
+                "tienda_online": bool(es_tienda), "puntuaciones": [], "evidencia": []}
+
+    top = sorted(puntuaciones.items(), key=lambda kv: kv[1], reverse=True)
+    mejor, segundo = top[0], (top[1] if len(top) > 1 else (None, 0))
+    if mejor[1] >= 14:
+        confianza = "alta"
+    elif mejor[1] >= 7:
+        confianza = "media"
+    else:
+        confianza = "baja"
+
+    secundaria = None
+    if segundo[0] and segundo[1] >= 6 and segundo[1] >= 0.5 * mejor[1]:
+        secundaria = segundo[0]
+
+    return {
+        "categoria": mejor[0],
+        "secundaria": secundaria,
+        "confianza": confianza,
+        "tienda_online": bool(es_tienda),
+        "puntuaciones": [{"categoria": c, "puntos": p} for c, p in top[:5]],
+        "evidencia": evidencia.get(mejor[0], [])[:8],
+    }
+
+
+def etiqueta_categoria(cat):
+    """Etiqueta corta para CSV/HTML a partir del dict de clasificar_negocio."""
+    if not cat or not cat.get("categoria"):
+        return "Tienda online (vertical no identificado)" if cat and cat.get("tienda_online") else "No identificada"
+    base = cat["categoria"]
+    if cat.get("tienda_online"):
+        base += " — tienda online"
+    if cat.get("secundaria"):
+        base += f" · 2ª: {cat['secundaria']}"
+    return f"{base} [{cat.get('confianza', '?')}]"

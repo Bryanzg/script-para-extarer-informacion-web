@@ -200,6 +200,27 @@ Telegram, Pinterest, GitHub, Threads, Snapchat, Discord, Vimeo y Mercado Libre.
 Las firmas viven en [`firmas_tecnologia.py`](firmas_tecnologia.py) y están pensadas para
 editarse fácilmente: agrega una entrada con el nombre, categoría y expresiones regulares.
 
+## 🏷️ Clasificador de categoría de negocio
+
+Cada sitio se clasifica en su **vertical de negocio** combinando tres señales:
+
+1. **`@type` de JSON-LD** — Schema.org tipifica negocios (`PetStore`, `Restaurant`,
+   `MedicalBusiness`, `RealEstateAgent`, `LegalService`, ~70 tipos mapeados) → señal máxima.
+2. **Palabras clave fuertes y de apoyo** en el texto visible (~24 verticales:
+   cannabis/CBD, mascotas, farmacia/salud, restaurantes, moda, electrónica, belleza,
+   hogar, deportes, automotriz, inmobiliaria, legal, finanzas, educación, viajes,
+   SaaS, agencia, industrial, construcción, joyería, infantil, supermercado…).
+3. **Stack ecommerce** — marca `— tienda online` cuando detecta Shopify,
+   WooCommerce, Magento, etc.
+
+El resultado incluye **`confianza`** (alta/media/baja según puntuación) y la
+**evidencia** (qué keywords o JSON-LD la activaron), aparece como columna
+`categoria_negocio` en el CSV, como insignia en el HTML y como
+`"categoria_negocio"` en el JSON. Para ajustar o agregar verticales, edita
+`CATEGORIAS_NEGOCIO` y `TIPO_LD_A_CATEGORIA` en `detectores.py`.
+
+Ejemplo (californialeaf.com.mx): `Cannabis / CBD y smoke shop — tienda online [alta]`.
+
 ## 🧬 Minería profunda del código fuente
 
 El extractor **no se queda en el texto visible**: cada página se descarga en crudo
