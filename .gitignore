@@ -1,0 +1,8 @@
+# Resultados de las auditorías (pueden contener datos personales de terceros)
+salida/
+output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

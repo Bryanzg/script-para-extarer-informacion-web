@@ -1,0 +1,159 @@
+{
+  "url_solicitada": "http://localhost:8931",
+  "fecha_auditoria": "2026-09-24T15:56:23",
+  "paginas_analizadas": [
+    "http://localhost:8931/",
+    "http://localhost:8931/aviso-legal/",
+    "http://localhost:8931/contacto/",
+    "http://localhost:8931/agenda/"
+  ],
+  "paginas_con_error": [],
+  "duracion_segundos": 0.0,
+  "estado": "ok",
+  "url_final": "http://localhost:8931/",
+  "codigo_http": 200,
+  "tecnologias": {
+    "CMS": [
+      "WooCommerce (plugin)",
+      "WordPress"
+    ],
+    "Ecommerce": [
+      "WooCommerce"
+    ],
+    "Analytics": [
+      "Google Tag Manager"
+    ],
+    "Advertising": [
+      "Meta Pixel (Facebook)"
+    ],
+    "Payments": [
+      "Stripe"
+    ],
+    "Chat y soporte": [
+      "Tawk.to",
+      "WhatsApp (widget/enlace)"
+    ],
+    "Consent": [
+      "OneTrust"
+    ],
+    "Scheduling": [
+      "Calendly"
+    ],
+    "Frameworks": [
+      "Bootstrap",
+      "jQuery"
+    ],
+    "CDN y hosting": [
+      "Cloudflare"
+    ],
+    "Server": [
+      "PHP"
+    ]
+  },
+  "contacto": {
+    "emails": [
+      "contacto@acme-demo.mx",
+      "facturacion@acme-demo.mx",
+      "ventas@acme-demo.mx"
+    ],
+    "telefonos": [
+      {
+        "numero": "+5215511223344",
+        "tipo": "enlace tel:",
+        "confianza": "alta"
+      },
+      {
+        "numero": "+52 55 8000 1234",
+        "tipo": "formato internacional",
+        "confianza": "alta"
+      },
+      {
+        "numero": "4242 4242 4242",
+        "tipo": "formato local",
+        "confianza": "media"
+      }
+    ],
+    "redes_sociales": {
+      "GitHub": [
+        "https://github.com/acme-demo/api-client"
+      ],
+      "Instagram": [
+        "https://www.instagram.com/acme.demo"
+      ],
+      "LinkedIn": [
+        "https://mx.linkedin.com/company/acme-demo"
+      ],
+      "WhatsApp": [
+        "https://wa.me/5215580001234"
+      ]
+    }
+  },
+  "exposicion_datos": [
+    {
+      "tipo": "Clave pública de Stripe (pk_live)",
+      "valor_enmascarado": "pk_l*********************************Wx",
+      "severidad": "baja",
+      "pagina": "http://localhost:8931/",
+      "nota": "pk_live es pública por diseño; se reporta para confirmar que el sitio usa Stripe. Revisar que NO exista sk_live.",
+      "contexto": "<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script> <script>var cfg={key:\"pk_l*********************************Wx\"};</script> </head><body class=\"woocommerce\"> <h1>Acme Demo — Corporativo</h1> <"
+    },
+    {
+      "tipo": "Número de tarjeta con formato válido (Luhn)",
+      "valor_enmascarado": "4242**********42",
+      "severidad": "crítica",
+      "pagina": "http://localhost:8931/aviso-legal/",
+      "nota": "",
+      "contexto": "l y privacidad Facturación: facturacion@acme-demo.mx Test card visible por error del dev: 4242**********42Github: repo público"
+    },
+    {
+      "tipo": "IBAN expuesto (ES)",
+      "valor_enmascarado": "ES91******************32",
+      "severidad": "alta",
+      "pagina": "http://localhost:8931/contacto/",
+      "nota": "",
+      "contexto": "765 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91******************32"
+    },
+    {
+      "tipo": "CLABE interbancaria expuesta (18 dígitos)",
+      "valor_enmascarado": "0121************65",
+      "severidad": "alta",
+      "pagina": "http://localhost:8931/contacto/",
+      "nota": "",
+      "contexto": "at] acme-demo [dot] mx WhatsApp: +5215*******44Banco CLABE BBVA CLABE interbancaria: 0121************65 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91 2100 0418"
+    },
+    {
+      "tipo": "Código SWIFT/BIC expuesto",
+      "valor_enmascarado": "BCMR*****YM",
+      "severidad": "media",
+      "pagina": "http://localhost:8931/contacto/",
+      "nota": "",
+      "contexto": "interbancaria: 0121************65 (solo transferencia SPEI) Swift (pagos internacionales) BCMRMXMMPYM IBAN para Europa: ES91******************32"
+    }
+  ],
+  "seguridad_http": {
+    "presentes": {
+      "HSTS": {
+        "valor": "max-age=31536000",
+        "descripcion": "Fuerza HTTPS en el navegador"
+      },
+      "X-Content-Type-Options": {
+        "valor": "nosniff",
+        "descripcion": "Evita MIME-sniffing"
+      }
+    },
+    "ausentes": [
+      "CSP",
+      "X-Frame-Options",
+      "Referrer-Policy",
+      "Permissions-Policy",
+      "X-XSS-Protection"
+    ],
+    "puntuacion": "2/7 (29%)",
+    "https": "no"
+  },
+  "cabeceras_servidor": {
+    "server": "SimpleHTTP/0.6 Python/3.11.2",
+    "x-powered-by": "PHP/8.2.12",
+    "cf-ray": "8f1a2b3c4d5e-MEX"
+  }
+}
