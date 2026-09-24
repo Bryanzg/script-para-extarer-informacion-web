@@ -102,7 +102,7 @@ _KW_TELEFONO = ("tel", "teléfono", "telefono", "phone", "cel", "móvil", "movil
 # ---- Redes sociales --------------------------------------------------
 DOMINIOS_SOCIALES = {
     "Facebook":   (r"(?:www\.)?facebook\.com/", r"/(sharer|login|tr\?)/"),
-    "Instagram":  (r"(?:www\.)?instagram\.com/", r"/(accounts|p/[a-zA-Z0-9_]+$)"),
+    "Instagram":  (r"(?:www\.)?(?:instagram\.com|ig\.me|l\.instagram\.com)/", r"/(accounts|p/[a-zA-Z0-9_]+$)"),
     "X / Twitter": (r"(?:www\.)?(?:twitter|x)\.com/", r"/(intent|share|search\?|hashtag)/"),
     "LinkedIn":   (r"(?:www\.)?linkedin\.com/(?:company|in|school|showcase)/", None),
     "YouTube":    (r"(?:www\.)?youtube\.com/(?:@|channel/|c/|user/)", r"/(watch|embed|shorts)/"),
