@@ -1,0 +1,79 @@
+{
+  "url_solicitada": "http://localhost:8935",
+  "empresa": "BrincaBrinca",
+  "fecha_auditoria": "2026-09-24T18:50:27",
+  "paginas_analizadas": [
+    "http://localhost:8935/",
+    "http://localhost:8935/contacto/"
+  ],
+  "paginas_con_error": [],
+  "duracion_segundos": 0.0,
+  "estado": "ok",
+  "url_final": "http://localhost:8935/",
+  "codigo_http": 200,
+  "tecnologias": {
+    "Media y mapas": [
+      "Google Fonts"
+    ]
+  },
+  "contacto": {
+    "emails": [
+      "renta@brincabrinca.mx"
+    ],
+    "telefonos": [
+      {
+        "numero": "+528331234567",
+        "tipo": "enlace tel:",
+        "confianza": "alta"
+      }
+    ],
+    "redes_sociales": {}
+  },
+  "codigo_fuente": {
+    "metadatos": {
+      "description": "Renta de inflables, brincolines y castillos inflables. Salón de fiestas con animación, inflables acuáticos y temáticos.",
+      "keywords": "inflables, brincolines, salón de fiestas, castillos inflables",
+      "title": "BrincaBrinca — Inflables y salón de fiestas en Tampico"
+    },
+    "datos_estructurados_jsonld": [],
+    "formularios": [],
+    "feeds": [],
+    "comentarios_reveladores": [],
+    "emails_solo_en_codigo": [
+      "renta@brincabrinca.mx"
+    ],
+    "shopify": {}
+  },
+  "categoria_negocio": {
+    "categoria": "Inflables",
+    "secundaria": null,
+    "confianza": "baja",
+    "tienda_online": false,
+    "puntuaciones": [],
+    "nueva": true,
+    "fuente": "palabras dominantes: inflables, salón, fiestas",
+    "evidencia": [
+      "palabra dominante: inflables (25×)",
+      "palabra dominante: salón (10×)",
+      "palabra dominante: fiestas (10×)"
+    ]
+  },
+  "exposicion_datos": [],
+  "seguridad_http": {
+    "presentes": {},
+    "ausentes": [
+      "HSTS",
+      "CSP",
+      "X-Frame-Options",
+      "X-Content-Type-Options",
+      "Referrer-Policy",
+      "Permissions-Policy",
+      "X-XSS-Protection"
+    ],
+    "puntuacion": "0/7 (0%)",
+    "https": "no"
+  },
+  "cabeceras_servidor": {
+    "server": "SimpleHTTP/0.6 Python/3.11.2"
+  }
+}

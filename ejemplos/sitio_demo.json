@@ -1,0 +1,117 @@
+{
+  "url_solicitada": "http://localhost:8934",
+  "empresa": "Acme Pets",
+  "fecha_auditoria": "2026-09-24T18:50:27",
+  "paginas_analizadas": [
+    "http://localhost:8934/",
+    "http://localhost:8934/contacto/"
+  ],
+  "paginas_con_error": [],
+  "duracion_segundos": 0.0,
+  "estado": "ok",
+  "url_final": "http://localhost:8934/",
+  "codigo_http": 200,
+  "tecnologias": {
+    "CMS": [
+      "WooCommerce (plugin)"
+    ],
+    "Ecommerce": [
+      "WooCommerce"
+    ]
+  },
+  "contacto": {
+    "emails": [
+      "info@acmepets.mx",
+      "ventas@acmepets.mx"
+    ],
+    "telefonos": [
+      {
+        "numero": "+52 55 9000 7788",
+        "tipo": "JSON-LD (datos estructurados)",
+        "confianza": "alta"
+      }
+    ],
+    "redes_sociales": {
+      "Instagram": [
+        "https://instagram.com/acmepets.mx"
+      ]
+    },
+    "direcciones": [
+      "Blvd. López Mateos 2025, Tampico, 89040, MX"
+    ]
+  },
+  "codigo_fuente": {
+    "metadatos": {
+      "description": "Alimento y accesorios para mascotas: croquetas para perros y gatos, juguetes y arena para gato.",
+      "keywords": "mascotas, croquetas, perros, gatos, veterinaria",
+      "title": "Acme Pets — Tienda de mascotas"
+    },
+    "datos_estructurados_jsonld": [
+      {
+        "tipo": "PetStore",
+        "nombre": "Acme Pets"
+      },
+      {
+        "tipo": "PostalAddress"
+      }
+    ],
+    "formularios": [],
+    "feeds": [],
+    "comentarios_reveladores": [],
+    "emails_solo_en_codigo": [
+      "info@acmepets.mx",
+      "ventas@acmepets.mx"
+    ],
+    "shopify": {}
+  },
+  "categoria_negocio": {
+    "categoria": "Mascotas",
+    "secundaria": null,
+    "confianza": "alta",
+    "tienda_online": true,
+    "puntuaciones": [
+      {
+        "categoria": "Mascotas",
+        "puntos": 44
+      },
+      {
+        "categoria": "Infantil y juguetes",
+        "puntos": 8
+      }
+    ],
+    "evidencia": [
+      "JSON-LD @type: PetStore",
+      "kw fuerte: mascotas",
+      "kw fuerte: perros",
+      "kw fuerte: gatos",
+      "kw fuerte: croquetas"
+    ]
+  },
+  "exposicion_datos": [
+    {
+      "tipo": "CLABE interbancaria expuesta (18 dígitos)",
+      "valor_enmascarado": "0121************65",
+      "severidad": "alta",
+      "pagina": "http://localhost:8934/contacto/",
+      "nota": "",
+      "contexto": "Contacto — Acme Pets ventas@acmepets.mx CLABE BBVA: 0121************65"
+    }
+  ],
+  "seguridad_http": {
+    "presentes": {},
+    "ausentes": [
+      "HSTS",
+      "CSP",
+      "X-Frame-Options",
+      "X-Content-Type-Options",
+      "Referrer-Policy",
+      "Permissions-Policy",
+      "X-XSS-Protection"
+    ],
+    "puntuacion": "0/7 (0%)",
+    "https": "no"
+  },
+  "cabeceras_servidor": {
+    "server": "SimpleHTTP/0.6 Python/3.11.2"
+  }
+}

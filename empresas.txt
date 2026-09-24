@@ -1,0 +1,11 @@
+# ---------------------------------------------------------------
+# Lista de empresas/sitios a auditar. Una URL por línea.
+# Las líneas que empiezan con # son comentarios.
+# Ejemplos:
+# https://www.ejemplo.com
+# empresa2.mx          (se le agrega https:// automáticamente)
+#
+# TIP: también puedes pasarle un CSV/TSV directamente:
+#   python extractor.py empresas_y_sitios_web.csv
+# (detecta solo la columna del sitio web y la del nombre de empresa)
+# ---------------------------------------------------------------
