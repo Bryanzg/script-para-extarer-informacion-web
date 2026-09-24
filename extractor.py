@@ -702,6 +702,13 @@ fines de la auditoría autorizada y notifica los hallazgos al responsable del si
             partes.append("<h3>🧬 Información del código fuente</h3>"
                           + _tabla_pares(filas_cf, ["Clave", "Valor"]))
 
+        # sección libre para hallazgos extraordinarios (auditorías manuales/one-off)
+        if r.get("extraccion_adicional"):
+            filas_x = [(k, v if "<" in str(v) else _esc(v))
+                       for k, v in r["extraccion_adicional"]]
+            partes.append("<h3>📌 Hallazgos adicionales</h3>"
+                          + _tabla_pares(filas_x, ["Clave", "Valor"]))
+
         c = r.get("contacto", {})
         filas = []
         if c.get("emails"):
